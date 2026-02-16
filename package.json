@@ -1,0 +1,40 @@
+{
+  "name": "v3",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@ant-design-vue/nuxt": "^1.4.6",
+    "@clerk/nuxt": "^1.13.20",
+    "@formkit/auto-animate": "^0.9.0",
+    "@nuxt/a11y": "^1.0.0-alpha.1",
+    "@nuxt/content": "^3.11.2",
+    "@nuxt/eslint": "^1.15.1",
+    "@nuxt/hints": "^1.0.0-alpha.6",
+    "@nuxt/scripts": "^0.13.2",
+    "@nuxt/ui": "^4.4.0",
+    "better-sqlite3": "^12.6.2",
+    "nuxt": "^4.3.1",
+    "nuxt-auth-utils": "^0.5.28",
+    "nuxt-authorization": "^0.3.5",
+    "nuxt-email-renderer": "^2.4.0",
+    "nuxt-icons": "^4.0.0",
+    "nuxt-jsonapi": "^3.1.0",
+    "nuxt-jsonld": "^2.2.1",
+    "nuxt-payload-analyzer": "^0.1.4",
+    "nuxt-processor": "^0.0.15",
+    "nuxt-qrcode": "^0.4.8",
+    "nuxt-security": "^2.5.1",
+    "nuxt-seo-utils": "^7.0.19",
+    "nuxt-toast": "^1.4.0",
+    "usebootstrap": "^3.5.107",
+    "vue": "^3.5.28",
+    "vue-router": "^4.6.4"
+  }
+}
