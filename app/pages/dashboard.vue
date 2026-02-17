@@ -11,12 +11,15 @@ const orderItemsApi = useSystemOrders()
 const usersApi = useSystemUsers()
 const productsApi = useSystemProducts()
 const productCatalogApi = useSystemProducts()
+const productStocksApi = useSystemProductStocks()
+const { toShortCode } = useShortCode()
 
 const isLoading = ref(false)
 const isTopProductsLoading = ref(false)
 const isTopSectionLoading = ref(false)
 const topRange = ref<'all' | 'today' | '7d' | '30d'>('7d')
 const topProductsToday = ref<Array<{ productId: string, productName: string, productNo: string, quantity: number, amount: number }>>([])
+const lowStockThreshold = 10
 
 function formatMoney(value: number) {
   return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -231,6 +234,36 @@ const productMap = computed(() => {
   return map
 })
 
+const lowStockProducts = computed(() => {
+  return productStocksApi.stocks.value
+    .filter((stock) => Number(stock.remaining) <= lowStockThreshold)
+    .map((stock) => ({
+      productId: stock.product_id,
+      productName: productMap.value.get(stock.product_id)?.name || '-',
+      productNo: productMap.value.get(stock.product_id)?.no || '-',
+      remaining: Number(stock.remaining || 0),
+      stockAmount: Number(stock.stock_amount || 0)
+    }))
+    .sort((left, right) => left.remaining - right.remaining)
+    .slice(0, 10)
+})
+
+function stockLevelClass(remaining: number) {
+  if (remaining <= 0) return 'low-stock-card-danger'
+  if (remaining <= lowStockThreshold) return 'low-stock-card-warning'
+  return 'low-stock-card-normal'
+}
+
+function stockLevelLabel(remaining: number) {
+  if (remaining <= 0) return 'หมดสต็อก'
+  if (remaining <= lowStockThreshold) return 'ใกล้หมด'
+  return 'ปกติ'
+}
+
+function customerReference(memberId: string) {
+  return toShortCode(memberId, 'MEM')
+}
+
 function buildTopRangeOrdersParams(range: 'all' | 'today' | '7d' | '30d') {
   const params: Record<string, unknown> = {
     page: 1,
@@ -320,7 +353,8 @@ async function loadDashboard() {
     allOrdersApi.fetchOrders({ page: 1, size: 5, sort_by: 'created_at', order_by: 'desc' }),
     usersApi.fetchUsers({ page: 1, size: 1, role: 'customer', sort_by: 'created_at', order_by: 'desc' }),
     productsApi.fetchProducts({ page: 1, size: 1, sort_by: 'created_at', order_by: 'desc' }),
-    productCatalogApi.fetchProducts({ page: 1, size: 3000, sort_by: 'created_at', order_by: 'desc' })
+    productCatalogApi.fetchProducts({ page: 1, size: 3000, sort_by: 'created_at', order_by: 'desc' }),
+    productStocksApi.fetchStocks({ page: 1, size: 3000, sort_by: 'remaining', order_by: 'asc' })
   ])
 
   await loadTopSection()
@@ -465,7 +499,7 @@ onMounted(async () => {
         <div v-else class="status-list">
           <div v-for="(item, index) in topCustomers" :key="item.memberId" class="recent-item">
             <div>
-              <p class="recent-no">#{{ index + 1 }} · {{ item.memberId }}</p>
+              <p class="recent-no">#{{ index + 1 }} · {{ customerReference(item.memberId) }}</p>
               <p class="recent-date">จำนวนออเดอร์ {{ item.orders }} รายการ</p>
             </div>
             <p class="recent-amount">฿{{ formatMoney(item.amount) }}</p>
@@ -491,6 +525,27 @@ onMounted(async () => {
             </div>
             <p class="recent-amount">฿{{ formatMoney(item.amount) }}</p>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-section">
+      <div class="section-header">
+        <h2 class="section-title">สินค้าใกล้หมดสต็อก</h2>
+      </div>
+
+      <div v-if="isLoading || productStocksApi.isLoading" class="placeholder-box">
+        <p class="placeholder-text">กำลังโหลดข้อมูลสต็อก...</p>
+      </div>
+      <div v-else-if="lowStockProducts.length === 0" class="placeholder-box">
+        <p class="placeholder-text">ยังไม่มีสินค้าที่ใกล้หมดสต็อก</p>
+      </div>
+      <div v-else class="low-stock-grid">
+        <div v-for="item in lowStockProducts" :key="item.productId" class="low-stock-card" :class="stockLevelClass(item.remaining)">
+          <p class="low-stock-name">{{ item.productName }}</p>
+          <p class="low-stock-no">{{ item.productNo }}</p>
+          <p class="low-stock-remaining">คงเหลือ {{ item.remaining }} / {{ item.stockAmount }}</p>
+          <p class="low-stock-badge">{{ stockLevelLabel(item.remaining) }}</p>
         </div>
       </div>
     </div>
@@ -567,6 +622,20 @@ onMounted(async () => {
 .recent-no { margin: 0; color: #0f172a; font-weight: 600; font-size: 14px; }
 .recent-date { margin: 4px 0 0 0; color: #64748b; font-size: 12px; }
 .recent-amount { margin: 0; color: #0f766e; font-weight: 700; font-size: 14px; }
+.low-stock-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 768px) { .low-stock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .low-stock-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.low-stock-card { border-radius: 10px; padding: 12px; }
+.low-stock-name { margin: 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+.low-stock-no { margin: 4px 0 0 0; font-size: 12px; color: #64748b; }
+.low-stock-remaining { margin: 6px 0 0 0; font-size: 13px; color: #334155; }
+.low-stock-badge { margin: 10px 0 0 0; font-size: 12px; font-weight: 700; }
+.low-stock-card-danger { border: 1px solid #fecaca; background: #fff5f5; }
+.low-stock-card-danger .low-stock-badge { color: #dc2626; }
+.low-stock-card-warning { border: 1px solid #fde68a; background: #fffbeb; }
+.low-stock-card-warning .low-stock-badge { color: #b45309; }
+.low-stock-card-normal { border: 1px solid #bbf7d0; background: #f0fdf4; }
+.low-stock-card-normal .low-stock-badge { color: #15803d; }
 
 @media (min-width: 768px) {
   .page-title { font-size: 32px; }

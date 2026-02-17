@@ -4,6 +4,7 @@ import type { OrderStatus } from '~/types/settings'
 definePageMeta({ layout: 'dashboard' })
 
 const { isLoading, errorMessage, orders, paginate, fetchOrders } = useSystemOrders()
+const { toShortCode } = useShortCode()
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -57,6 +58,15 @@ function statusLabel(status?: string) {
     case 'cancelled': return 'ยกเลิก'
     default: return status || '-'
   }
+}
+
+function isWaitingCustomerRepay(item: { status?: string, payment_rejected?: boolean, payment_submitted?: boolean }) {
+  return item.status === 'pending' && Boolean(item.payment_rejected) && !Boolean(item.payment_submitted)
+}
+
+function orderReference(orderNo?: string, id?: string) {
+  if (orderNo) return orderNo
+  return toShortCode(id, 'ORD')
 }
 
 function toUnixStartOfDay(dateText: string) {
@@ -192,9 +202,12 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <tbody>
               <tr v-if="orders.length === 0"><td colspan="6" class="empty-cell">ไม่พบข้อมูล</td></tr>
               <tr v-for="item in orders" :key="item.id">
-                <td>{{ item.order_no || '-' }}</td>
-                <td>{{ item.member_id || '-' }}</td>
-                <td><span class="badge" :class="`badge-${item.status}`">{{ statusLabel(item.status) }}</span></td>
+                <td>{{ orderReference(item.order_no, item.id) }}</td>
+                <td>{{ toShortCode(item.member_id, 'MEM') }}</td>
+                <td>
+                  <span class="badge" :class="`badge-${item.status}`">{{ statusLabel(item.status) }}</span>
+                  <span v-if="isWaitingCustomerRepay(item)" class="badge badge-waiting-repay">รอลูกค้าชำระใหม่</span>
+                </td>
                 <td>{{ formatMoney(item.net_amount) }}</td>
                 <td>{{ formatDateTime(item.created_at) }}</td>
                 <td class="actions-col">
@@ -248,6 +261,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .badge-shipping { color: #1d4ed8; background: #dbeafe; }
 .badge-completed { color: #0f766e; background: #ccfbf1; }
 .badge-cancelled { color: #991b1b; background: #fee2e2; }
+.badge-waiting-repay { color: #b45309; background: #fef3c7; margin-left: 6px; }
 .action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
 .action-detail { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
 .pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; }

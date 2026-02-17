@@ -151,6 +151,38 @@ export interface BankPayload {
   is_active: boolean
 }
 
+export interface SystemPaymentItem {
+  id: string
+  amount: string | number
+  status: 'pending' | 'success' | 'failed' | 'refunded' | string
+  approved_by?: string | null
+  approved_at?: string | null
+}
+
+export interface StorageFileItem {
+  id: string
+  ref_id: string
+  file_name: string
+  file_path: string
+  file_size: number
+  file_type: string
+  is_active: boolean
+  related_entity: string
+  uploaded_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface OrderPaymentDetail {
+  payment: SystemPaymentItem | null
+  slips: StorageFileItem[]
+}
+
+export interface SystemPaymentPayload {
+  amount: string
+  status: 'pending' | 'success' | 'failed' | 'refunded'
+}
+
 export interface CategoryItem {
   id: string
   parent_id?: string | null
@@ -294,6 +326,10 @@ export interface Order {
   payment_id: string
   address_id: string
   status: OrderStatus | string
+  shipping_tracking_no?: string
+  payment_submitted?: boolean
+  payment_rejected?: boolean
+  payment_rejection_reason?: string
   total_amount: string | number
   discount_amount: string | number
   net_amount: string | number

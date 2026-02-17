@@ -1,4 +1,4 @@
-import type { ApiPaginate, ApiResponse, Order, OrderItem, OrderListParams, OrderTimelineItem } from '~/types/settings'
+import type { ApiPaginate, ApiResponse, Order, OrderItem, OrderListParams, OrderPaymentDetail, OrderTimelineItem, StorageFileItem, SystemPaymentItem } from '~/types/settings'
 import { SETTINGS_CONFIG } from '~/constants/settings'
 
 export function useSystemOrders() {
@@ -113,6 +113,19 @@ export function useSystemOrders() {
     return `${apiBaseUrl}${endpoint}/${id}/timeline`
   }
 
+  function buildPaymentPath(id: string) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.payments
+    return `${apiBaseUrl}${endpoint}/${id}`
+  }
+
+  function buildStorageListUrl(refID: string) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const url = new URL(`${apiBaseUrl}/auth/storages/`)
+    url.searchParams.set('ref_id', refID)
+    return url.toString()
+  }
+
   async function fetchOrders(params: OrderListParams = {}) {
     errorMessage.value = ''
     successMessage.value = ''
@@ -220,7 +233,35 @@ export function useSystemOrders() {
     }
   }
 
-  async function updateOrderStatus(order: Order, status: string) {
+  async function fetchOrderPaymentDetail(order: Order): Promise<OrderPaymentDetail> {
+    const paymentID = String(order.payment_id || '').trim()
+    if (!paymentID) {
+      return { payment: null, slips: [] }
+    }
+
+    let payment: SystemPaymentItem | null = null
+    let slips: StorageFileItem[] = []
+
+    try {
+      const paymentResponse = await fetchWithAuthRetry<ApiResponse<SystemPaymentItem>>(buildPaymentPath(paymentID), { method: 'GET' })
+      payment = (isSuccessCode(paymentResponse.code) ? paymentResponse.data : null) || null
+    } catch {
+      payment = null
+    }
+
+    try {
+      const storageResponse = await fetchWithAuthRetry<ApiResponse<StorageFileItem[]>>(buildStorageListUrl(paymentID), { method: 'GET' })
+      slips = isSuccessCode(storageResponse.code)
+        ? (storageResponse.data || []).filter((item) => String(item.related_entity || '').toUpperCase() === 'PAYMENT_FILE')
+        : []
+    } catch {
+      slips = []
+    }
+
+    return { payment, slips }
+  }
+
+  async function updateOrderStatus(order: Order, status: string, shippingTrackingNo?: string) {
     errorMessage.value = ''
     successMessage.value = ''
 
@@ -230,6 +271,7 @@ export function useSystemOrders() {
         payment_id: order.payment_id,
         address_id: order.address_id,
         status,
+        shipping_tracking_no: String(shippingTrackingNo || ''),
         total_amount: String(order.total_amount),
         discount_amount: String(order.discount_amount),
         net_amount: String(order.net_amount)
@@ -257,6 +299,59 @@ export function useSystemOrders() {
     }
   }
 
+  async function approveOrderPayment(id: string) {
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<null>>(`${buildInfoPath(id)}/payment/approve`, {
+        method: 'PATCH'
+      })
+
+      if (!isSuccessCode(response.code)) {
+        throw new Error(response.message || SETTINGS_CONFIG.messages.updateError)
+      }
+
+      successMessage.value = response.message || 'อนุมัติการชำระเงินสำเร็จ'
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = normalizeOrderErrorMessage(fetchError.data?.message || fetchError.message, 'ไม่สามารถอนุมัติการชำระเงินได้')
+      } else {
+        errorMessage.value = normalizeOrderErrorMessage(error instanceof Error ? error.message : undefined, 'ไม่สามารถอนุมัติการชำระเงินได้')
+      }
+      return false
+    }
+  }
+
+  async function rejectOrderPayment(id: string, reason: string) {
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<null>>(`${buildInfoPath(id)}/payment/reject`, {
+        method: 'PATCH',
+        body: { reason }
+      })
+
+      if (!isSuccessCode(response.code)) {
+        throw new Error(response.message || SETTINGS_CONFIG.messages.updateError)
+      }
+
+      successMessage.value = response.message || 'ไม่อนุมัติการชำระเงินแล้ว'
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = normalizeOrderErrorMessage(fetchError.data?.message || fetchError.message, 'ไม่สามารถไม่อนุมัติการชำระเงินได้')
+      } else {
+        errorMessage.value = normalizeOrderErrorMessage(error instanceof Error ? error.message : undefined, 'ไม่สามารถไม่อนุมัติการชำระเงินได้')
+      }
+      return false
+    }
+  }
+
   return {
     isLoading,
     isItemsLoading,
@@ -272,6 +367,9 @@ export function useSystemOrders() {
     fetchOrderItems,
     fetchOrderItemsByOrderId,
     fetchOrderTimeline,
-    updateOrderStatus
+    fetchOrderPaymentDetail,
+    updateOrderStatus,
+    approveOrderPayment,
+    rejectOrderPayment
   }
 }
