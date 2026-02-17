@@ -202,6 +202,24 @@ export function useSystemOrders() {
     }
   }
 
+  async function fetchOrderItemsByOrderId(id: string, page = 1, size = 200) {
+    errorMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<OrderItem[]>>(buildItemsPath(id, page, size), { method: 'GET' })
+      if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
+      return response.data || []
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = normalizeOrderErrorMessage(fetchError.data?.message || fetchError.message, SETTINGS_CONFIG.messages.loadError)
+      } else {
+        errorMessage.value = normalizeOrderErrorMessage(error instanceof Error ? error.message : undefined, SETTINGS_CONFIG.messages.loadError)
+      }
+      return []
+    }
+  }
+
   async function updateOrderStatus(order: Order, status: string) {
     errorMessage.value = ''
     successMessage.value = ''
@@ -252,6 +270,7 @@ export function useSystemOrders() {
     fetchOrders,
     fetchOrderById,
     fetchOrderItems,
+    fetchOrderItemsByOrderId,
     fetchOrderTimeline,
     updateOrderStatus
   }
