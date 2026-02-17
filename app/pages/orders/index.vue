@@ -1,0 +1,263 @@
+<script setup lang="ts">
+import type { OrderStatus } from '~/types/settings'
+
+definePageMeta({ layout: 'dashboard' })
+
+const { isLoading, errorMessage, orders, paginate, fetchOrders } = useSystemOrders()
+
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 20, 50, 100]
+
+const searchKeyword = ref('')
+const memberIdFilter = ref('')
+const statusFilter = ref<OrderStatus | ''>('')
+const startDate = ref('')
+const endDate = ref('')
+
+const toast = reactive({ show: false, type: 'error' as 'success' | 'error' | 'warning', message: '' })
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const statusOptions: Array<{ label: string, value: OrderStatus }> = [
+  { label: 'รอดำเนินการ', value: 'pending' },
+  { label: 'ชำระเงินแล้ว', value: 'paid' },
+  { label: 'กำลังจัดส่ง', value: 'shipping' },
+  { label: 'สำเร็จ', value: 'completed' },
+  { label: 'ยกเลิก', value: 'cancelled' }
+]
+
+const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
+
+function showToast(type: 'success' | 'error' | 'warning', message: string) {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.show = true
+  toast.type = type
+  toast.message = message
+  toastTimer = setTimeout(() => { toast.show = false }, 3000)
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('th-TH')
+}
+
+function formatMoney(value: string | number) {
+  const amount = Number(value)
+  if (Number.isNaN(amount)) return String(value)
+  return amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function statusLabel(status?: string) {
+  switch (status) {
+    case 'pending': return 'รอดำเนินการ'
+    case 'paid': return 'ชำระเงินแล้ว'
+    case 'shipping': return 'กำลังจัดส่ง'
+    case 'completed': return 'สำเร็จ'
+    case 'cancelled': return 'ยกเลิก'
+    default: return status || '-'
+  }
+}
+
+function toUnixStartOfDay(dateText: string) {
+  const date = new Date(`${dateText}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return undefined
+  return Math.floor(date.getTime() / 1000)
+}
+
+function toUnixEndOfDay(dateText: string) {
+  const date = new Date(`${dateText}T23:59:59`)
+  if (Number.isNaN(date.getTime())) return undefined
+  return Math.floor(date.getTime() / 1000)
+}
+
+async function load(page = 1) {
+  currentPage.value = page
+
+  const params: Record<string, unknown> = {
+    page,
+    size: pageSize.value,
+    sort_by: 'created_at',
+    order_by: 'desc'
+  }
+
+  if (searchKeyword.value.trim()) params.search = searchKeyword.value.trim()
+  if (memberIdFilter.value.trim()) params.member_id = memberIdFilter.value.trim()
+  if (statusFilter.value) params.status = statusFilter.value
+
+  const start = startDate.value ? toUnixStartOfDay(startDate.value) : undefined
+  const end = endDate.value ? toUnixEndOfDay(endDate.value) : undefined
+  if (start) params.start_date = start
+  if (end) params.end_date = end
+
+  await fetchOrders(params)
+}
+
+function handleSearch() {
+  void load(1)
+}
+
+function clearFilters() {
+  searchKeyword.value = ''
+  memberIdFilter.value = ''
+  statusFilter.value = ''
+  startDate.value = ''
+  endDate.value = ''
+  void load(1)
+}
+
+function handlePageSizeChange() {
+  void load(1)
+}
+
+watch(errorMessage, (value) => {
+  if (value) showToast('error', value)
+})
+
+onMounted(async () => {
+  await load(1)
+})
+
+onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
+</script>
+
+<template>
+  <div class="settings-page">
+    <transition name="toast-slide">
+      <div v-if="toast.show" class="toast-notification" :class="`toast-${toast.type}`"><span>{{ toast.message }}</span></div>
+    </transition>
+
+    <div class="page-header">
+      <h1 class="page-title">จัดการคำสั่งซื้อ</h1>
+      <p class="page-subtitle">รายการคำสั่งซื้อพร้อมค้นหาและกรองข้อมูล</p>
+    </div>
+
+    <div class="content-card">
+      <div class="card-section">
+        <h3 class="section-title">ตัวกรอง</h3>
+        <div class="filter-grid">
+          <div class="form-group">
+            <label>ค้นหารหัสคำสั่งซื้อ</label>
+            <input v-model="searchKeyword" type="text" placeholder="เช่น ORD-000123" @keyup.enter="handleSearch">
+          </div>
+          <div class="form-group">
+            <label>ค้นหารหัสสมาชิก</label>
+            <input v-model="memberIdFilter" type="text" placeholder="กรอกรหัสสมาชิก" @keyup.enter="handleSearch">
+          </div>
+          <div class="form-group">
+            <label>สถานะ</label>
+            <select v-model="statusFilter">
+              <option value="">ทั้งหมด</option>
+              <option v-for="item in statusOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>วันที่เริ่มต้น</label>
+            <input v-model="startDate" type="date">
+          </div>
+          <div class="form-group">
+            <label>วันที่สิ้นสุด</label>
+            <input v-model="endDate" type="date">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn-submit" :disabled="isLoading" @click="handleSearch">ค้นหา</button>
+          <button class="btn-secondary" :disabled="isLoading" @click="clearFilters">ล้างตัวกรอง</button>
+          <button class="btn-secondary" :disabled="isLoading" @click="load(currentPage)">รีเฟรช</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="card-section">
+        <div class="table-header">
+          <h3 class="section-title">รายการคำสั่งซื้อ</h3>
+        </div>
+
+        <div v-if="isLoading" class="loading-container"><div class="loading-spinner"></div><p>กำลังโหลดข้อมูล...</p></div>
+
+        <div v-else class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>รหัสคำสั่งซื้อ</th>
+                <th>รหัสสมาชิก</th>
+                <th>สถานะ</th>
+                <th>ยอดรวมสุทธิ</th>
+                <th>สร้างเมื่อ</th>
+                <th class="actions-col">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="orders.length === 0"><td colspan="6" class="empty-cell">ไม่พบข้อมูล</td></tr>
+              <tr v-for="item in orders" :key="item.id">
+                <td>{{ item.order_no || '-' }}</td>
+                <td>{{ item.member_id || '-' }}</td>
+                <td><span class="badge" :class="`badge-${item.status}`">{{ statusLabel(item.status) }}</span></td>
+                <td>{{ formatMoney(item.net_amount) }}</td>
+                <td>{{ formatDateTime(item.created_at) }}</td>
+                <td class="actions-col">
+                  <NuxtLink class="action-link action-detail" :to="`/orders/${item.id}`">ดูรายละเอียด</NuxtLink>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination-row">
+          <label class="page-size-control">แสดง<select v-model.number="pageSize" :disabled="isLoading" @change="handlePageSizeChange"><option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option></select>รายการ</label>
+          <button class="btn-secondary" :disabled="currentPage <= 1 || isLoading" @click="load(currentPage - 1)">ก่อนหน้า</button>
+          <span>หน้า {{ currentPage }} / {{ totalPages }}</span>
+          <button class="btn-secondary" :disabled="currentPage >= totalPages || isLoading" @click="load(currentPage + 1)">ถัดไป</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.settings-page { max-width: 1400px; margin: 0 auto; width: 100%; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 28px; font-weight: 700; color: #1e293b; margin: 0 0 4px 0; }
+.page-subtitle { font-size: 14px; color: #64748b; margin: 0; }
+.content-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+.card-section { padding: 24px; }
+.section-title { font-size: 18px; font-weight: 600; color: #1e293b; margin: 0 0 16px 0; }
+.filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1024px) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 768px) { .filter-grid { grid-template-columns: 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 8px; }
+.form-group label { font-size: 14px; font-weight: 600; color: #334155; }
+.form-group input,.form-group select { height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; }
+.form-actions { margin-top: 16px; display: flex; gap: 10px; }
+.btn-submit,.btn-secondary { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
+.btn-submit { color: #fff; background: #4f46e5; }
+.btn-secondary { color: #334155; background: #f8fafc; border-color: #d1d5db; }
+.divider { border-top: 1px solid #e2e8f0; }
+.table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; }
+.data-table th { background: #f8fafc; font-weight: 700; }
+.empty-cell { text-align: center !important; color: #64748b !important; }
+.actions-col { width: 160px; text-align: center !important; }
+.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.badge-pending { color: #92400e; background: #fffbeb; }
+.badge-paid { color: #166534; background: #dcfce7; }
+.badge-shipping { color: #1d4ed8; background: #dbeafe; }
+.badge-completed { color: #0f766e; background: #ccfbf1; }
+.badge-cancelled { color: #991b1b; background: #fee2e2; }
+.action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
+.action-detail { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+.pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; }
+.page-size-control { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
+.page-size-control select { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 8px; background: #fff; }
+.loading-container { display: flex; align-items: center; gap: 10px; color: #64748b; }
+.loading-spinner { width: 22px; height: 22px; border-radius: 999px; border: 2px solid #cbd5e1; border-top-color: #4f46e5; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.toast-notification { position: fixed; top: 88px; right: 24px; z-index: 80; min-width: 240px; padding: 12px 14px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(15,23,42,0.15); background: #fff; }
+.toast-error { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
+.toast-success { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.toast-warning { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+</style>

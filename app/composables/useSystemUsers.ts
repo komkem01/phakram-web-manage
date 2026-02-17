@@ -1,0 +1,169 @@
+import type { ApiPaginate, ApiResponse, MemberItem, MemberRegisterPayload, MemberUpdatePayload, UserListParams } from '~/types/settings'
+import { SETTINGS_CONFIG } from '~/constants/settings'
+
+export function useSystemUsers() {
+  const config = useRuntimeConfig()
+  const { refreshAccessToken, logout } = useAdminAuth()
+
+  const isLoading = ref(false)
+  const errorMessage = ref('')
+  const successMessage = ref('')
+  const users = ref<MemberItem[]>([])
+  const paginate = ref<ApiPaginate>({ page: 1, size: 10, total: 0 })
+
+  function isSuccessCode(code: string | number) {
+    return code === '200' || code === 200
+  }
+
+  function getAuthHeader() {
+    if (!process.client) return ''
+    const token = localStorage.getItem('access_token')
+    const tokenType = localStorage.getItem('token_type') || 'Bearer'
+    return token ? `${tokenType} ${token}` : ''
+  }
+
+  function isUnauthorizedError(error: unknown) {
+    if (!error || typeof error !== 'object') return false
+    const statusCode = 'statusCode' in error ? (error as { statusCode?: number }).statusCode : undefined
+    const status = 'status' in error ? (error as { status?: number }).status : undefined
+    const dataCode = 'data' in error ? (error as { data?: { code?: string | number } }).data?.code : undefined
+    return statusCode === 401 || status === 401 || dataCode === '401' || dataCode === 401
+  }
+
+  function normalizeUserErrorMessage(message: string | undefined, fallback: string) {
+    if (!message) return fallback
+    const value = message.trim().toLowerCase()
+    if (value === 'invalid role') return 'บทบาทผู้ใช้งานไม่ถูกต้อง'
+    return message
+  }
+
+  async function fetchWithAuthRetry<T>(requestUrl: string, options: Omit<Parameters<typeof $fetch<T>>[1], 'headers'> = {}) {
+    try {
+      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+    } catch (error) {
+      if (!isUnauthorizedError(error)) throw error
+      const refreshed = await refreshAccessToken()
+      if (!refreshed) {
+        logout()
+        await navigateTo('/')
+        throw error
+      }
+      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+    }
+  }
+
+  function buildUrl(params: UserListParams = {}) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.members
+    const url = new URL(`${apiBaseUrl}${endpoint}/`)
+
+    url.searchParams.set('page', String(params.page || 1))
+    url.searchParams.set('size', String(params.size || 10))
+
+    if (params.role) url.searchParams.set('role', params.role)
+    if (params.search) url.searchParams.set('search', params.search)
+    if (params.search_by) url.searchParams.set('search_by', params.search_by)
+    if (params.sort_by) url.searchParams.set('sort_by', params.sort_by)
+    if (params.order_by) url.searchParams.set('order_by', params.order_by)
+
+    return url.toString()
+  }
+
+  function buildPath(id = '') {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.members
+    return id ? `${apiBaseUrl}${endpoint}/${id}` : `${apiBaseUrl}${endpoint}/`
+  }
+
+  function buildRegisterPath() {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.members
+    return `${apiBaseUrl}${endpoint}/register`
+  }
+
+  async function fetchUsers(params: UserListParams = {}) {
+    errorMessage.value = ''
+    successMessage.value = ''
+    isLoading.value = true
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<MemberItem[]>>(buildUrl(params), { method: 'GET' })
+      if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
+      users.value = response.data || []
+      paginate.value = response.paginate || { page: 1, size: 10, total: users.value.length }
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = fetchError.data?.message || fetchError.message || SETTINGS_CONFIG.messages.loadError
+      } else {
+        errorMessage.value = error instanceof Error ? error.message : SETTINGS_CONFIG.messages.loadError
+      }
+      return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function createUser(payload: MemberRegisterPayload) {
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<null>>(buildRegisterPath(), { method: 'POST', body: payload })
+      if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.createError)
+      successMessage.value = response.message || SETTINGS_CONFIG.messages.createSuccess
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = normalizeUserErrorMessage(fetchError.data?.message || fetchError.message, SETTINGS_CONFIG.messages.createError)
+      } else {
+        errorMessage.value = normalizeUserErrorMessage(error instanceof Error ? error.message : undefined, SETTINGS_CONFIG.messages.createError)
+      }
+      return false
+    }
+  }
+
+  async function updateUser(id: string, payload: MemberUpdatePayload) {
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<null>>(buildPath(id), { method: 'PATCH', body: payload })
+      if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.updateError)
+      successMessage.value = response.message || SETTINGS_CONFIG.messages.updateSuccess
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = normalizeUserErrorMessage(fetchError.data?.message || fetchError.message, SETTINGS_CONFIG.messages.updateError)
+      } else {
+        errorMessage.value = normalizeUserErrorMessage(error instanceof Error ? error.message : undefined, SETTINGS_CONFIG.messages.updateError)
+      }
+      return false
+    }
+  }
+
+  async function deleteUser(id: string) {
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<null>>(buildPath(id), { method: 'DELETE' })
+      if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.deleteError)
+      successMessage.value = response.message || SETTINGS_CONFIG.messages.deleteSuccess
+      return true
+    } catch (error) {
+      if (error && typeof error === 'object' && 'data' in error) {
+        const fetchError = error as { data?: { message?: string }, message?: string }
+        errorMessage.value = fetchError.data?.message || fetchError.message || SETTINGS_CONFIG.messages.deleteError
+      } else {
+        errorMessage.value = error instanceof Error ? error.message : SETTINGS_CONFIG.messages.deleteError
+      }
+      return false
+    }
+  }
+
+  return { isLoading, errorMessage, successMessage, users, paginate, fetchUsers, createUser, updateUser, deleteUser }
+}
