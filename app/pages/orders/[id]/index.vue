@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Order, OrderPaymentDetail } from '~/types/settings'
+import type { MemberBankItem, Order, OrderPaymentDetail } from '~/types/settings'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -7,11 +7,13 @@ const route = useRoute()
 const orderId = computed(() => String(route.params.id || ''))
 const { toShortCode } = useShortCode()
 
-const { isLoading, isItemsLoading, errorMessage, successMessage, orderItems, orderTimeline, itemsPaginate, fetchOrderById, fetchOrderItems, fetchOrderTimeline, fetchOrderPaymentDetail, updateOrderStatus, approveOrderPayment, rejectOrderPayment } = useSystemOrders()
+const { isLoading, isItemsLoading, errorMessage, successMessage, orderItems, orderTimeline, itemsPaginate, fetchOrderById, fetchOrderItems, fetchOrderTimeline, fetchOrderPaymentDetail, fetchMemberBanks, updateOrderStatus, approveOrderPayment, rejectOrderPayment } = useSystemOrders()
 
 const order = ref<Order | null>(null)
 const paymentDetail = ref<OrderPaymentDetail>({ payment: null, slips: [] })
+const memberBanks = ref<MemberBankItem[]>([])
 const isPaymentDetailLoading = ref(false)
+const isMemberBanksLoading = ref(false)
 const itemPage = ref(1)
 const itemPageSize = ref(10)
 const statusForm = ref('')
@@ -19,9 +21,13 @@ const shippingTrackingNoForm = ref('')
 const isStatusSubmitting = ref(false)
 const isPaymentApproving = ref(false)
 const isPaymentRejecting = ref(false)
+const isRefundDecisionSubmitting = ref(false)
 const isRejectModalOpen = ref(false)
+const isRefundRejectModalOpen = ref(false)
+const isRefundApproveModalOpen = ref(false)
 const isShippingModalOpen = ref(false)
 const rejectReason = ref('')
+const refundRejectReason = ref('')
 const timelineRange = ref<'all' | 'today' | '7d' | '30d'>('all')
 
 const toast = reactive({ show: false, type: 'error' as 'success' | 'error' | 'warning', message: '' })
@@ -40,10 +46,29 @@ const canSubmitStatus = computed(() => {
 const canSubmitShippingModal = computed(() => Boolean(shippingTrackingNoForm.value.trim() && !isStatusSubmitting.value))
 const canApprovePayment = computed(() => Boolean(order.value && order.value.status === 'pending' && order.value.payment_submitted && !isPaymentApproving.value))
 const canRejectPayment = computed(() => Boolean(order.value && order.value.status === 'pending' && order.value.payment_submitted && !isPaymentRejecting.value))
+const canApproveRefundRequest = computed(() => Boolean(order.value && order.value.status === 'refund_requested' && !isRefundDecisionSubmitting.value))
+const canRejectRefundRequest = computed(() => Boolean(order.value && order.value.status === 'refund_requested' && !isRefundDecisionSubmitting.value))
+const showPaymentDecisionActions = computed(() => Boolean(order.value && order.value.status === 'pending' && order.value.payment_submitted))
+const showRefundDecisionActions = computed(() => Boolean(order.value && order.value.status === 'refund_requested' && !isAppealReviewMode.value))
+const canSubmitRefundApprove = computed(() => Boolean(canApproveRefundRequest.value && defaultRefundBank.value && !isMemberBanksLoading.value))
 const canSubmitReject = computed(() => Boolean(canRejectPayment.value && rejectReason.value.trim().length > 0))
+const canSubmitRefundReject = computed(() => Boolean(canRejectRefundRequest.value && refundRejectReason.value.trim().length > 0))
 const filteredTimeline = computed(() => orderTimeline.value.filter((item) => isTimelineInRange(item.created_at, timelineRange.value)))
+const defaultRefundBank = computed(() => memberBanks.value.find((item) => item.is_default) || memberBanks.value[0] || null)
+const paymentAppealReason = computed(() => {
+  const value = (order.value as (Order & { payment_appeal_reason?: string }) | null)?.payment_appeal_reason
+  return String(value || '').trim()
+})
+const isAppealReviewMode = computed(() => Boolean(order.value && order.value.status === 'pending' && order.value.payment_submitted && paymentAppealReason.value))
+const showRefundBankSection = computed(() => {
+  if (!order.value) return false
+  if (order.value.status === 'refund_requested') return true
+  if (paymentAppealReason.value && ['success', 'refunded'].includes(String(paymentDetail.value.payment?.status || '').toLowerCase())) return true
+  return false
+})
 const statusEffectHint = computed(() => {
   if (statusForm.value === 'paid') return 'เมื่อเปลี่ยนเป็นชำระเงินแล้ว ระบบจะบันทึกข้อมูลการชำระเงินสมาชิก'
+  if (statusForm.value === 'refund_requested') return 'คำขอคืนเงินจะถูกส่งให้แอดมินพิจารณาอนุมัติหรือปฏิเสธ'
   if (statusForm.value === 'shipping') return 'เมื่อเปลี่ยนเป็นกำลังจัดส่ง ระบบจะตัดสต๊อกสินค้าตามจำนวนในคำสั่งซื้อ'
   if (statusForm.value === 'completed') return 'เมื่อเปลี่ยนเป็นสำเร็จ จะปิดงานคำสั่งซื้อและไม่สามารถเปลี่ยนสถานะต่อได้'
   if (statusForm.value === 'cancelled') return 'เมื่อเปลี่ยนเป็นยกเลิก จะยุติคำสั่งซื้อและไม่สามารถเปลี่ยนสถานะต่อได้'
@@ -56,8 +81,9 @@ const statusOptions = computed(() => {
   if (isWaitingCustomerRepay.value) return []
 
   const current = order.value.status
-  if (current === 'pending') return [{ label: 'ชำระเงินแล้ว', value: 'paid' }, { label: 'ยกเลิก', value: 'cancelled' }]
-  if (current === 'paid') return [{ label: 'กำลังจัดส่ง', value: 'shipping' }, { label: 'ยกเลิก', value: 'cancelled' }]
+  if (current === 'pending') return [{ label: 'ชำระเงินแล้ว', value: 'paid' }, { label: 'รอพิจารณาคืนเงิน', value: 'refund_requested' }, { label: 'ยกเลิก', value: 'cancelled' }]
+  if (current === 'refund_requested') return []
+  if (current === 'paid') return [{ label: 'กำลังจัดส่ง', value: 'shipping' }]
   if (current === 'shipping') return [{ label: 'สำเร็จ', value: 'completed' }]
   return []
 })
@@ -86,6 +112,7 @@ function statusLabel(status?: string) {
   switch (status) {
     case 'pending': return 'รอดำเนินการ'
     case 'paid': return 'ชำระเงินแล้ว'
+    case 'refund_requested': return 'รอพิจารณาคืนเงิน'
     case 'shipping': return 'กำลังจัดส่ง'
     case 'completed': return 'สำเร็จ'
     case 'cancelled': return 'ยกเลิก'
@@ -101,6 +128,7 @@ function auditStatusLabel(status?: string) {
 
 function timelineTitle(item: { action_type?: string, from_status?: string, to_status?: string }) {
   if (item.action_type === 'order_payment_submitted') return 'ลูกค้าส่งหลักฐานการชำระเงิน'
+  if (item.action_type === 'order_payment_appealed') return 'ลูกค้าอุทธรณ์การชำระเงิน'
   if (item.action_type === 'order_payment_approved') return 'แอดมินอนุมัติการชำระเงิน'
   if (item.action_type === 'order_payment_rejected') return 'แอดมินไม่อนุมัติการชำระเงิน'
   if (item.action_type === 'order_shipping_tracking_updated') return 'บันทึกเลขพัสดุ'
@@ -130,12 +158,50 @@ function paymentStatusClass(status?: string | null) {
   return ''
 }
 
+function paymentEvidenceStatusLabel() {
+  const status = String(paymentDetail.value.payment?.status || '').toLowerCase()
+  const hasSubmittedEvidence = Boolean(order.value?.payment_submitted) || paymentDetail.value.slips.length > 0
+
+  if (status === 'success') return 'ยืนยันชำระแล้ว'
+  if (status === 'failed') return 'ไม่ผ่านการตรวจสอบ'
+  if (hasSubmittedEvidence) return 'ลูกค้าส่งหลักฐานแล้ว (รอตรวจสอบ)'
+  return 'ยังไม่มีหลักฐานการชำระเงิน'
+}
+
+function paymentEvidenceStatusClass() {
+  const status = String(paymentDetail.value.payment?.status || '').toLowerCase()
+  const hasSubmittedEvidence = Boolean(order.value?.payment_submitted) || paymentDetail.value.slips.length > 0
+
+  if (status === 'success') return 'badge-paid'
+  if (status === 'failed') return 'badge-cancelled'
+  if (hasSubmittedEvidence) return 'badge-pending'
+  return 'badge-refund_requested'
+}
+
+function paymentEvidenceSummary() {
+  const status = String(paymentDetail.value.payment?.status || '').toLowerCase()
+  const hasSubmittedEvidence = Boolean(order.value?.payment_submitted) || paymentDetail.value.slips.length > 0
+
+  if (status === 'success') return 'แอดมินอนุมัติการชำระเงินแล้ว'
+  if (status === 'failed') return 'มีการตรวจสอบแล้วและไม่อนุมัติการชำระเงิน'
+  if (hasSubmittedEvidence) return 'ลูกค้าส่งสลิปแล้ว แต่ยังไม่ยืนยันว่าโอนสำเร็จจนกว่าแอดมินจะอนุมัติ'
+  return 'ยังไม่มีการส่งหลักฐานจากลูกค้า จึงยังยืนยันไม่ได้ว่ามีการชำระเงินจริง'
+}
+
 function formatFileSize(size?: number) {
   const value = Number(size || 0)
   if (!value) return '-'
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / (1024 * 1024)).toFixed(2)} MB`
+}
+
+function bankAccountHolderName(bank: MemberBankItem | null | undefined) {
+  if (!bank) return '-'
+  const thName = `${String(bank.firstname_th || '').trim()} ${String(bank.lastname_th || '').trim()}`.trim()
+  if (thName) return thName
+  const enName = `${String(bank.firstname_en || '').trim()} ${String(bank.lastname_en || '').trim()}`.trim()
+  return enName || '-'
 }
 
 const orderReference = computed(() => {
@@ -182,11 +248,19 @@ async function loadOrder() {
   shippingTrackingNoForm.value = String(data?.shipping_tracking_no || '')
 
   paymentDetail.value = { payment: null, slips: [] }
+  memberBanks.value = []
   if (!data) return
 
   isPaymentDetailLoading.value = true
-  paymentDetail.value = await fetchOrderPaymentDetail(data)
+  isMemberBanksLoading.value = true
+  const [payment, banks] = await Promise.all([
+    fetchOrderPaymentDetail(data),
+    fetchMemberBanks(String(data.member_id || '').trim())
+  ])
+  paymentDetail.value = payment
+  memberBanks.value = banks
   isPaymentDetailLoading.value = false
+  isMemberBanksLoading.value = false
 }
 
 async function loadItems(page = 1) {
@@ -267,6 +341,56 @@ async function handleRejectPayment() {
   await refreshPage()
 }
 
+async function handleApproveRefundRequest() {
+  if (!canApproveRefundRequest.value) return
+  isRefundApproveModalOpen.value = true
+}
+
+function closeRefundApproveModal() {
+  if (isRefundDecisionSubmitting.value) return
+  isRefundApproveModalOpen.value = false
+}
+
+async function submitApproveRefundRequest() {
+  if (!order.value || !canSubmitRefundApprove.value) return
+
+  isRefundDecisionSubmitting.value = true
+  const success = await updateOrderStatus(order.value, 'cancelled', '', {
+    cancelReason: String(order.value.cancellation_reason || '').trim()
+  })
+  isRefundDecisionSubmitting.value = false
+  if (!success) return
+
+  isRefundApproveModalOpen.value = false
+  await refreshPage()
+}
+
+async function handleRejectRefundRequest() {
+  if (!canRejectRefundRequest.value) return
+  refundRejectReason.value = ''
+  isRefundRejectModalOpen.value = true
+}
+
+function closeRefundRejectModal() {
+  if (isRefundDecisionSubmitting.value) return
+  isRefundRejectModalOpen.value = false
+}
+
+async function submitRejectRefundRequest() {
+  if (!order.value || !canSubmitRefundReject.value) return
+
+  isRefundDecisionSubmitting.value = true
+  const success = await updateOrderStatus(order.value, 'paid', '', {
+    refundReason: refundRejectReason.value.trim()
+  })
+  isRefundDecisionSubmitting.value = false
+  if (!success) return
+
+  isRefundRejectModalOpen.value = false
+  refundRejectReason.value = ''
+  await refreshPage()
+}
+
 watch(errorMessage, (value) => {
   if (value) showToast('error', value)
 })
@@ -303,7 +427,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
       <div class="card-section" v-if="order">
         <h3 class="section-title">ข้อมูลคำสั่งซื้อ</h3>
         <div class="status-form-row">
-          <div class="form-group status-form-group">
+          <div v-if="!isAppealReviewMode" class="form-group status-form-group">
             <label>เปลี่ยนสถานะคำสั่งซื้อ</label>
             <select v-model="statusForm" :disabled="isStatusSubmitting || statusOptions.length === 0 || isWaitingCustomerRepay">
               <option :value="order.status">สถานะเดิม: {{ statusLabel(order.status) }}</option>
@@ -312,9 +436,15 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <p v-if="statusEffectHint" class="status-hint">{{ statusEffectHint }}</p>
             <p v-if="isWaitingCustomerRepay" class="status-hint status-hint-warning">รายการนี้ถูกไม่อนุมัติ กรุณารอลูกค้ายืนยันการชำระเงินใหม่ก่อน</p>
           </div>
-          <button class="btn-submit" :disabled="!canSubmitStatus" @click="handleUpdateStatus">บันทึกสถานะ</button>
-          <button class="btn-approve" :disabled="!canApprovePayment" @click="handleApprovePayment">อนุมัติการชำระเงิน</button>
-          <button class="btn-reject" :disabled="!canRejectPayment" @click="openRejectModal">ไม่อนุมัติการชำระเงิน</button>
+          <button v-if="!isAppealReviewMode" class="btn-submit" :disabled="!canSubmitStatus" @click="handleUpdateStatus">บันทึกสถานะ</button>
+          <button v-if="showPaymentDecisionActions" class="btn-approve" :disabled="!canApprovePayment" @click="handleApprovePayment">อนุมัติเงิน</button>
+          <button v-if="showPaymentDecisionActions" class="btn-reject" :disabled="!canRejectPayment" @click="openRejectModal">ไม่อนุมัติเงิน</button>
+          <button v-if="showRefundDecisionActions" class="btn-approve" :disabled="!canApproveRefundRequest" @click="handleApproveRefundRequest">
+            {{ isRefundDecisionSubmitting ? 'กำลังบันทึก...' : 'อนุมัติคืนเงิน' }}
+          </button>
+          <button v-if="showRefundDecisionActions" class="btn-reject" :disabled="!canRejectRefundRequest" @click="handleRejectRefundRequest">
+            {{ isRefundDecisionSubmitting ? 'กำลังบันทึก...' : 'ปฏิเสธคืนเงิน' }}
+          </button>
         </div>
         <div class="info-grid">
           <div class="info-item"><span class="label">รหัสคำสั่งซื้อ</span><span class="value">{{ orderReference }}</span></div>
@@ -335,6 +465,11 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           <div class="info-item"><span class="label">ยอดสุทธิ</span><span class="value">{{ formatMoney(order.net_amount) }}</span></div>
         </div>
 
+        <div v-if="order.status === 'refund_requested'" class="rejection-box" style="margin-top:12px;">
+          <p class="rejection-title">คำขอคืนเงินจากลูกค้า</p>
+          <p class="rejection-reason">เหตุผล: {{ order.cancellation_reason || '-' }}</p>
+        </div>
+
         <div class="divider section-divider"></div>
 
         <div>
@@ -348,15 +483,45 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <div class="info-grid">
               <div class="info-item"><span class="label">รหัสการชำระเงิน</span><span class="value">{{ toShortCode(order.payment_id, 'PAY') }}</span></div>
               <div class="info-item"><span class="label">สถานะการชำระเงิน</span><span class="value"><span class="badge" :class="paymentStatusClass(paymentDetail.payment?.status)">{{ paymentStatusLabel(paymentDetail.payment?.status) }}</span></span></div>
+              <div class="info-item"><span class="label">หลักฐานจากลูกค้า</span><span class="value"><span class="badge" :class="paymentEvidenceStatusClass()">{{ paymentEvidenceStatusLabel() }}</span></span></div>
               <div class="info-item"><span class="label">ยอดชำระเงิน</span><span class="value">{{ paymentDetail.payment ? formatMoney(paymentDetail.payment.amount) : '-' }}</span></div>
               <div class="info-item"><span class="label">ผู้อนุมัติ</span><span class="value">{{ toShortCode(paymentDetail.payment?.approved_by, 'ADM') }}</span></div>
               <div class="info-item"><span class="label">เวลาอนุมัติ</span><span class="value">{{ formatDateTime(paymentDetail.payment?.approved_at) }}</span></div>
               <div class="info-item"><span class="label">จำนวนไฟล์สลิป</span><span class="value">{{ paymentDetail.slips.length }}</span></div>
             </div>
 
+            <div class="divider section-divider"></div>
+
+            <div v-if="showRefundBankSection">
+              <h4 class="section-title" style="font-size:16px;margin-bottom:10px;">ช่องทางคืนเงินลูกค้า</h4>
+              <div v-if="isMemberBanksLoading" class="loading-container"><div class="loading-spinner"></div><p>กำลังโหลดบัญชีลูกค้า...</p></div>
+              <div v-else-if="!defaultRefundBank" class="empty-text">ลูกค้ายังไม่ได้เพิ่มบัญชีสำหรับรับเงินคืน</div>
+              <div v-else class="info-grid">
+                <div class="info-item"><span class="label">ธนาคาร</span><span class="value">{{ defaultRefundBank.bank_name_th || defaultRefundBank.bank_name_en || toShortCode(defaultRefundBank.bank_id, 'BNK') }}</span></div>
+                <div class="info-item"><span class="label">เลขบัญชี</span><span class="value">{{ defaultRefundBank.bank_no || '-' }}</span></div>
+                <div class="info-item"><span class="label">ชื่อบัญชี</span><span class="value">{{ bankAccountHolderName(defaultRefundBank) }}</span></div>
+              </div>
+              <p v-if="defaultRefundBank?.is_default" class="status-hint" style="margin-top:8px;">ใช้บัญชีหลักของลูกค้า (Default)</p>
+            </div>
+
+            <div class="rejection-box" style="border-color:#fed7aa;background:#fff7ed;">
+              <p class="rejection-title" style="color:#9a3412;">สรุปการยืนยันการชำระเงิน</p>
+              <p class="rejection-reason" style="color:#7c2d12;">{{ paymentEvidenceSummary() }}</p>
+            </div>
+
+            <div v-if="order.refund_rejection_reason" class="rejection-box" style="border-color:#fca5a5;background:#fff1f2;">
+              <p class="rejection-title">เหตุผลที่ไม่อนุมัติการคืนเงิน</p>
+              <p class="rejection-reason">{{ order.refund_rejection_reason }}</p>
+            </div>
+
             <div v-if="order.payment_rejected" class="rejection-box">
               <p class="rejection-title">รายการนี้ถูกไม่อนุมัติ</p>
               <p class="rejection-reason">เหตุผล: {{ order.payment_rejection_reason || '-' }}</p>
+            </div>
+
+            <div v-if="paymentAppealReason" class="rejection-box" style="border-color:#bfdbfe;background:#eff6ff;">
+              <p class="rejection-title" style="color:#1d4ed8;">เหตุผลอุทธรณ์การชำระเงิน</p>
+              <p class="rejection-reason" style="color:#1e3a8a;">{{ paymentAppealReason }}</p>
             </div>
 
             <div v-if="paymentDetail.slips.length > 0" class="slip-grid">
@@ -395,6 +560,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <thead>
               <tr>
                 <th>รหัสสินค้า</th>
+                <th>ชื่อสินค้า</th>
                 <th>จำนวน</th>
                 <th>ราคาต่อหน่วย</th>
                 <th>รวมรายการ</th>
@@ -402,9 +568,10 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
               </tr>
             </thead>
             <tbody>
-              <tr v-if="orderItems.length === 0"><td colspan="5" class="empty-cell">ไม่พบรายการสินค้า</td></tr>
+              <tr v-if="orderItems.length === 0"><td colspan="6" class="empty-cell">ไม่พบรายการสินค้า</td></tr>
               <tr v-for="item in orderItems" :key="item.id">
                 <td>{{ toShortCode(item.product_id, 'PRD') }}</td>
+                <td>{{ item.product_name_th || item.product_name_en || '-' }}</td>
                 <td>{{ item.quantity }}</td>
                 <td>{{ formatMoney(item.price_per_unit) }}</td>
                 <td>{{ formatMoney(item.total_item_amount) }}</td>
@@ -492,6 +659,47 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
         </div>
       </div>
     </div>
+
+    <div v-if="isRefundRejectModalOpen" class="modal-overlay" @click.self="closeRefundRejectModal">
+      <div class="modal-card">
+        <h3 class="modal-title">ปฏิเสธคำขอคืนเงิน</h3>
+        <p class="modal-desc">กรุณาระบุเหตุผลเพื่อแจ้งลูกค้าว่าทำไมจึงไม่อนุมัติการคืนเงิน</p>
+        <textarea
+          v-model="refundRejectReason"
+          class="modal-textarea"
+          rows="4"
+          placeholder="ระบุเหตุผลที่ปฏิเสธคำขอคืนเงิน"
+        />
+        <div class="modal-actions">
+          <button class="btn-secondary" :disabled="isRefundDecisionSubmitting" @click="closeRefundRejectModal">ยกเลิก</button>
+          <button class="btn-reject" :disabled="!canSubmitRefundReject" @click="submitRejectRefundRequest">
+            {{ isRefundDecisionSubmitting ? 'กำลังบันทึก...' : 'ยืนยันปฏิเสธคืนเงิน' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="isRefundApproveModalOpen" class="modal-overlay" @click.self="closeRefundApproveModal">
+      <div class="modal-card">
+        <h3 class="modal-title">ยืนยันอนุมัติการคืนเงิน</h3>
+        <p class="modal-desc">ตรวจสอบข้อมูลบัญชีลูกค้าก่อนกดยืนยันอนุมัติการคืนเงิน</p>
+
+        <div v-if="isMemberBanksLoading" class="loading-container" style="margin-top:10px;"><div class="loading-spinner"></div><p>กำลังโหลดบัญชีลูกค้า...</p></div>
+        <div v-else-if="!defaultRefundBank" class="empty-text" style="margin-top:10px;text-align:left !important;">ลูกค้ายังไม่ได้เพิ่มบัญชีสำหรับรับเงินคืน</div>
+        <div v-else class="info-grid" style="margin-top:10px;">
+          <div class="info-item"><span class="label">ธนาคาร</span><span class="value">{{ defaultRefundBank.bank_name_th || defaultRefundBank.bank_name_en || toShortCode(defaultRefundBank.bank_id, 'BNK') }}</span></div>
+          <div class="info-item"><span class="label">เลขบัญชี</span><span class="value">{{ defaultRefundBank.bank_no || '-' }}</span></div>
+          <div class="info-item"><span class="label">ชื่อบัญชี</span><span class="value">{{ bankAccountHolderName(defaultRefundBank) }}</span></div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" :disabled="isRefundDecisionSubmitting" @click="closeRefundApproveModal">ยกเลิก</button>
+          <button class="btn-approve" :disabled="!canSubmitRefundApprove" @click="submitApproveRefundRequest">
+            {{ isRefundDecisionSubmitting ? 'กำลังบันทึก...' : 'ยืนยันอนุมัติคืนเงิน' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -523,6 +731,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .badge-pending { color: #92400e; background: #fffbeb; }
 .badge-paid { color: #166534; background: #dcfce7; }
+.badge-refund_requested { color: #9a3412; background: #ffedd5; }
 .badge-shipping { color: #1d4ed8; background: #dbeafe; }
 .badge-completed { color: #0f766e; background: #ccfbf1; }
 .badge-cancelled { color: #991b1b; background: #fee2e2; }

@@ -42,6 +42,7 @@ export function useSystemCategories() {
       return await $fetch<T>(requestUrl, {
         ...options,
         headers: {
+          'ngrok-skip-browser-warning': 'true',
           Authorization: getAuthHeader()
         }
       })
@@ -60,6 +61,7 @@ export function useSystemCategories() {
       return await $fetch<T>(requestUrl, {
         ...options,
         headers: {
+          'ngrok-skip-browser-warning': 'true',
           Authorization: getAuthHeader()
         }
       })

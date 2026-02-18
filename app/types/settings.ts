@@ -151,6 +151,22 @@ export interface BankPayload {
   is_active: boolean
 }
 
+export interface MemberBankItem {
+  id: string
+  member_id: string
+  bank_id: string
+  bank_no: string
+  firstname_th: string
+  lastname_th: string
+  firstname_en: string
+  lastname_en: string
+  is_default: boolean
+  bank_name_th?: string
+  bank_name_en?: string
+  created_at?: string
+  updated_at?: string
+}
+
 export interface SystemPaymentItem {
   id: string
   amount: string | number
@@ -306,12 +322,14 @@ export interface MemberUpdatePayload {
   status_id?: string
 }
 
-export type OrderStatus = 'pending' | 'paid' | 'shipping' | 'completed' | 'cancelled'
+export type OrderStatus = 'pending' | 'paid' | 'refund_requested' | 'shipping' | 'completed' | 'cancelled'
 
 export interface OrderItem {
   id: string
   order_id: string
   product_id: string
+  product_name_th?: string
+  product_name_en?: string
   quantity: number
   price_per_unit: string | number
   total_item_amount: string | number
@@ -326,10 +344,15 @@ export interface Order {
   payment_id: string
   address_id: string
   status: OrderStatus | string
+  status_summary?: string
+  status_next_step?: string
   shipping_tracking_no?: string
   payment_submitted?: boolean
   payment_rejected?: boolean
   payment_rejection_reason?: string
+  payment_appeal_reason?: string
+  refund_rejection_reason?: string
+  cancellation_reason?: string
   total_amount: string | number
   discount_amount: string | number
   net_amount: string | number

@@ -1,4 +1,4 @@
-import type { ApiPaginate, ApiResponse, Order, OrderItem, OrderListParams, OrderPaymentDetail, OrderTimelineItem, StorageFileItem, SystemPaymentItem } from '~/types/settings'
+import type { ApiPaginate, ApiResponse, BankItem, MemberBankItem, Order, OrderItem, OrderListParams, OrderPaymentDetail, OrderTimelineItem, ProductItem, StorageFileItem, SystemPaymentItem } from '~/types/settings'
 import { SETTINGS_CONFIG } from '~/constants/settings'
 
 export function useSystemOrders() {
@@ -119,11 +119,63 @@ export function useSystemOrders() {
     return `${apiBaseUrl}${endpoint}/${id}`
   }
 
+  function buildProductInfoPath(id: string) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.products
+    return `${apiBaseUrl}${endpoint}/${id}`
+  }
+
   function buildStorageListUrl(refID: string) {
     const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
     const url = new URL(`${apiBaseUrl}/auth/storages/`)
     url.searchParams.set('ref_id', refID)
     return url.toString()
+  }
+
+  function buildMemberBanksPath(memberID: string) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.members
+    return `${apiBaseUrl}${endpoint}/${memberID}/banks/`
+  }
+
+  function buildBankInfoPath(bankID: string) {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const endpoint = SETTINGS_CONFIG.endpoints.banks
+    return `${apiBaseUrl}${endpoint}/${bankID}`
+  }
+
+  async function enrichOrderItemsWithProductNames(items: OrderItem[]) {
+    const productIDs = [...new Set(items.map((item) => String(item.product_id || '').trim()).filter(Boolean))]
+    if (productIDs.length === 0) return items
+
+    const productNameMap: Record<string, { name_th?: string, name_en?: string }> = {}
+
+    const entries = await Promise.all(productIDs.map(async (productID) => {
+      try {
+        const response = await fetchWithAuthRetry<ApiResponse<ProductItem>>(buildProductInfoPath(productID), { method: 'GET' })
+        if (!isSuccessCode(response.code) || !response.data) return [productID, null] as const
+        return [productID, response.data] as const
+      } catch {
+        return [productID, null] as const
+      }
+    }))
+
+    for (const [productID, product] of entries) {
+      if (!product) continue
+      productNameMap[productID] = {
+        name_th: String(product.name_th || '').trim(),
+        name_en: String(product.name_en || '').trim()
+      }
+    }
+
+    return items.map((item) => {
+      const productInfo = productNameMap[String(item.product_id || '').trim()]
+      return {
+        ...item,
+        product_name_th: productInfo?.name_th || '',
+        product_name_en: productInfo?.name_en || ''
+      }
+    })
   }
 
   async function fetchOrders(params: OrderListParams = {}) {
@@ -179,7 +231,8 @@ export function useSystemOrders() {
       const response = await fetchWithAuthRetry<ApiResponse<OrderItem[]>>(buildItemsPath(id, page, size), { method: 'GET' })
       if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
 
-      orderItems.value = response.data || []
+      const enrichedItems = await enrichOrderItemsWithProductNames(response.data || [])
+      orderItems.value = enrichedItems
       itemsPaginate.value = response.paginate || { page: 1, size, total: orderItems.value.length }
       return true
     } catch (error) {
@@ -221,7 +274,7 @@ export function useSystemOrders() {
     try {
       const response = await fetchWithAuthRetry<ApiResponse<OrderItem[]>>(buildItemsPath(id, page, size), { method: 'GET' })
       if (!isSuccessCode(response.code)) throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
-      return response.data || []
+      return await enrichOrderItemsWithProductNames(response.data || [])
     } catch (error) {
       if (error && typeof error === 'object' && 'data' in error) {
         const fetchError = error as { data?: { message?: string }, message?: string }
@@ -261,7 +314,61 @@ export function useSystemOrders() {
     return { payment, slips }
   }
 
-  async function updateOrderStatus(order: Order, status: string, shippingTrackingNo?: string) {
+  async function fetchMemberBanks(memberID: string) {
+    const normalizedMemberID = String(memberID || '').trim()
+    if (!normalizedMemberID) return [] as MemberBankItem[]
+
+    try {
+      const response = await fetchWithAuthRetry<ApiResponse<MemberBankItem[]>>(`${buildMemberBanksPath(normalizedMemberID)}?page=1&size=100`, {
+        method: 'GET'
+      })
+      if (!isSuccessCode(response.code)) {
+        throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
+      }
+
+      const banks = (response.data || []).map((item) => ({
+        ...item,
+        bank_name_th: '',
+        bank_name_en: ''
+      }))
+
+      const bankIDs = [...new Set(banks.map((item) => String(item.bank_id || '').trim()).filter(Boolean))]
+      if (bankIDs.length === 0) {
+        return banks.sort((left, right) => Number(right.is_default) - Number(left.is_default))
+      }
+
+      const bankEntries = await Promise.all(bankIDs.map(async (bankID) => {
+        try {
+          const bankResponse = await fetchWithAuthRetry<ApiResponse<BankItem>>(buildBankInfoPath(bankID), { method: 'GET' })
+          if (!isSuccessCode(bankResponse.code) || !bankResponse.data) return [bankID, null] as const
+          return [bankID, bankResponse.data] as const
+        } catch {
+          return [bankID, null] as const
+        }
+      }))
+
+      const bankMap: Record<string, BankItem> = {}
+      for (const [bankID, bank] of bankEntries) {
+        if (!bank) continue
+        bankMap[bankID] = bank
+      }
+
+      return banks
+        .map((item) => {
+          const bank = bankMap[String(item.bank_id || '').trim()]
+          return {
+            ...item,
+            bank_name_th: String(bank?.name_th || '').trim(),
+            bank_name_en: String(bank?.name_en || '').trim()
+          }
+        })
+        .sort((left, right) => Number(right.is_default) - Number(left.is_default))
+    } catch {
+      return [] as MemberBankItem[]
+    }
+  }
+
+  async function updateOrderStatus(order: Order, status: string, shippingTrackingNo?: string, options?: { cancelReason?: string, refundReason?: string }) {
     errorMessage.value = ''
     successMessage.value = ''
 
@@ -272,6 +379,8 @@ export function useSystemOrders() {
         address_id: order.address_id,
         status,
         shipping_tracking_no: String(shippingTrackingNo || ''),
+        cancel_reason: String(options?.cancelReason || ''),
+        refund_reason: String(options?.refundReason || ''),
         total_amount: String(order.total_amount),
         discount_amount: String(order.discount_amount),
         net_amount: String(order.net_amount)
@@ -368,6 +477,7 @@ export function useSystemOrders() {
     fetchOrderItemsByOrderId,
     fetchOrderTimeline,
     fetchOrderPaymentDetail,
+    fetchMemberBanks,
     updateOrderStatus,
     approveOrderPayment,
     rejectOrderPayment

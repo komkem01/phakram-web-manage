@@ -30,8 +30,11 @@ export function useSystemProductStocks() {
   }
 
   async function fetchWithAuthRetry<T>(requestUrl: string, options: Omit<Parameters<typeof $fetch<T>>[1], 'headers'> = {}) {
+    const authHeader = getAuthHeader()
+    const requestHeaders = authHeader ? { Authorization: authHeader } : {}
+
     try {
-      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+      return await $fetch<T>(requestUrl, { ...options, headers: requestHeaders })
     } catch (error) {
       if (!isUnauthorizedError(error)) throw error
 
@@ -42,7 +45,9 @@ export function useSystemProductStocks() {
         throw error
       }
 
-      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+      const refreshedAuthHeader = getAuthHeader()
+      const refreshedRequestHeaders = refreshedAuthHeader ? { Authorization: refreshedAuthHeader } : {}
+      return await $fetch<T>(requestUrl, { ...options, headers: refreshedRequestHeaders })
     }
   }
 

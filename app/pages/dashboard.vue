@@ -235,17 +235,27 @@ const productMap = computed(() => {
 })
 
 const lowStockProducts = computed(() => {
-  return productStocksApi.stocks.value
-    .filter((stock) => Number(stock.remaining) <= lowStockThreshold)
-    .map((stock) => ({
-      productId: stock.product_id,
-      productName: productMap.value.get(stock.product_id)?.name || '-',
-      productNo: productMap.value.get(stock.product_id)?.no || '-',
-      remaining: Number(stock.remaining || 0),
-      stockAmount: Number(stock.stock_amount || 0)
-    }))
+  const normalizedStocks = productStocksApi.stocks.value
+    .map((stock) => {
+      const remaining = Number(stock.remaining)
+      const stockAmount = Number(stock.stock_amount)
+
+      return {
+        productId: stock.product_id,
+        productName: productMap.value.get(stock.product_id)?.name || '-',
+        productNo: productMap.value.get(stock.product_id)?.no || '-',
+        remaining: Number.isNaN(remaining) ? 0 : remaining,
+        stockAmount: Number.isNaN(stockAmount) ? 0 : stockAmount
+      }
+    })
     .sort((left, right) => left.remaining - right.remaining)
-    .slice(0, 10)
+
+  const lowStockOnly = normalizedStocks.filter((stock) => stock.remaining <= lowStockThreshold)
+  if (lowStockOnly.length > 0) {
+    return lowStockOnly.slice(0, 10)
+  }
+
+  return normalizedStocks.slice(0, 10)
 })
 
 function stockLevelClass(remaining: number) {
@@ -536,6 +546,9 @@ onMounted(async () => {
 
       <div v-if="isLoading || productStocksApi.isLoading" class="placeholder-box">
         <p class="placeholder-text">กำลังโหลดข้อมูลสต็อก...</p>
+      </div>
+      <div v-else-if="productStocksApi.errorMessage" class="placeholder-box">
+        <p class="placeholder-text">{{ productStocksApi.errorMessage }}</p>
       </div>
       <div v-else-if="lowStockProducts.length === 0" class="placeholder-box">
         <p class="placeholder-text">ยังไม่มีสินค้าที่ใกล้หมดสต็อก</p>

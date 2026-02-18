@@ -15,6 +15,7 @@ const memberIdFilter = ref('')
 const statusFilter = ref<OrderStatus | ''>('')
 const startDate = ref('')
 const endDate = ref('')
+const quickQueue = ref<'all' | 'waiting-review' | 'waiting-repay' | 'ready-ship' | 'refund-requested' | 'shipping' | 'completed' | 'cancelled'>('all')
 
 const toast = reactive({ show: false, type: 'error' as 'success' | 'error' | 'warning', message: '' })
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -22,12 +23,49 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 const statusOptions: Array<{ label: string, value: OrderStatus }> = [
   { label: 'รอดำเนินการ', value: 'pending' },
   { label: 'ชำระเงินแล้ว', value: 'paid' },
+  { label: 'รอพิจารณาคืนเงิน', value: 'refund_requested' },
   { label: 'กำลังจัดส่ง', value: 'shipping' },
   { label: 'สำเร็จ', value: 'completed' },
   { label: 'ยกเลิก', value: 'cancelled' }
 ]
 
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
+
+const quickQueueCounts = computed(() => {
+  const waitingReview = orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_submitted)).length
+  const waitingRepay = orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_rejected) && !Boolean(item.payment_submitted)).length
+  const readyShip = orders.value.filter(item => item.status === 'paid').length
+  const refundRequested = orders.value.filter(item => item.status === 'refund_requested').length
+  const shipping = orders.value.filter(item => item.status === 'shipping').length
+  const completed = orders.value.filter(item => item.status === 'completed').length
+  const cancelled = orders.value.filter(item => item.status === 'cancelled').length
+  return { waitingReview, waitingRepay, readyShip, refundRequested, shipping, completed, cancelled }
+})
+
+const displayedOrders = computed(() => {
+  if (quickQueue.value === 'waiting-review') {
+    return orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_submitted))
+  }
+  if (quickQueue.value === 'waiting-repay') {
+    return orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_rejected) && !Boolean(item.payment_submitted))
+  }
+  if (quickQueue.value === 'ready-ship') {
+    return orders.value.filter(item => item.status === 'paid')
+  }
+  if (quickQueue.value === 'refund-requested') {
+    return orders.value.filter(item => item.status === 'refund_requested')
+  }
+  if (quickQueue.value === 'shipping') {
+    return orders.value.filter(item => item.status === 'shipping')
+  }
+  if (quickQueue.value === 'completed') {
+    return orders.value.filter(item => item.status === 'completed')
+  }
+  if (quickQueue.value === 'cancelled') {
+    return orders.value.filter(item => item.status === 'cancelled')
+  }
+  return orders.value
+})
 
 function showToast(type: 'success' | 'error' | 'warning', message: string) {
   if (toastTimer) clearTimeout(toastTimer)
@@ -53,6 +91,7 @@ function statusLabel(status?: string) {
   switch (status) {
     case 'pending': return 'รอดำเนินการ'
     case 'paid': return 'ชำระเงินแล้ว'
+    case 'refund_requested': return 'รอพิจารณาคืนเงิน'
     case 'shipping': return 'กำลังจัดส่ง'
     case 'completed': return 'สำเร็จ'
     case 'cancelled': return 'ยกเลิก'
@@ -113,7 +152,12 @@ function clearFilters() {
   statusFilter.value = ''
   startDate.value = ''
   endDate.value = ''
+  quickQueue.value = 'all'
   void load(1)
+}
+
+function setQuickQueue(value: 'all' | 'waiting-review' | 'waiting-repay' | 'ready-ship' | 'refund-requested' | 'shipping' | 'completed' | 'cancelled') {
+  quickQueue.value = value
 }
 
 function handlePageSizeChange() {
@@ -143,6 +187,46 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
     </div>
 
     <div class="content-card">
+      <div class="card-section">
+        <h3 class="section-title">คิวด่วน</h3>
+        <div class="quick-queue-grid">
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'waiting-review' }" @click="setQuickQueue('waiting-review')">
+            <p class="quick-queue-title">รอตรวจสอบ</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.waitingReview }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'waiting-repay' }" @click="setQuickQueue('waiting-repay')">
+            <p class="quick-queue-title">รอลูกค้าชำระใหม่</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.waitingRepay }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'ready-ship' }" @click="setQuickQueue('ready-ship')">
+            <p class="quick-queue-title">พร้อมจัดส่ง</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.readyShip }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'refund-requested' }" @click="setQuickQueue('refund-requested')">
+            <p class="quick-queue-title">รอพิจารณาคืนเงิน</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.refundRequested }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'shipping' }" @click="setQuickQueue('shipping')">
+            <p class="quick-queue-title">กำลังจัดส่ง</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.shipping }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'completed' }" @click="setQuickQueue('completed')">
+            <p class="quick-queue-title">สำเร็จ</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.completed }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'cancelled' }" @click="setQuickQueue('cancelled')">
+            <p class="quick-queue-title">ยกเลิก</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.cancelled }}</p>
+          </button>
+          <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'all' }" @click="setQuickQueue('all')">
+            <p class="quick-queue-title">ทั้งหมด</p>
+            <p class="quick-queue-count">{{ orders.length }}</p>
+          </button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
       <div class="card-section">
         <h3 class="section-title">ตัวกรอง</h3>
         <div class="filter-grid">
@@ -200,13 +284,14 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
               </tr>
             </thead>
             <tbody>
-              <tr v-if="orders.length === 0"><td colspan="6" class="empty-cell">ไม่พบข้อมูล</td></tr>
-              <tr v-for="item in orders" :key="item.id">
+              <tr v-if="displayedOrders.length === 0"><td colspan="6" class="empty-cell">ไม่พบข้อมูล</td></tr>
+              <tr v-for="item in displayedOrders" :key="item.id">
                 <td>{{ orderReference(item.order_no, item.id) }}</td>
                 <td>{{ toShortCode(item.member_id, 'MEM') }}</td>
                 <td>
-                  <span class="badge" :class="`badge-${item.status}`">{{ statusLabel(item.status) }}</span>
+                  <span class="badge" :class="`badge-${item.status}`">{{ item.status_summary || statusLabel(item.status) }}</span>
                   <span v-if="isWaitingCustomerRepay(item)" class="badge badge-waiting-repay">รอลูกค้าชำระใหม่</span>
+                  <p v-if="item.status_next_step" class="status-next-step">{{ item.status_next_step }}</p>
                 </td>
                 <td>{{ formatMoney(item.net_amount) }}</td>
                 <td>{{ formatDateTime(item.created_at) }}</td>
@@ -237,6 +322,13 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .content-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
 .card-section { padding: 24px; }
 .section-title { font-size: 18px; font-weight: 600; color: #1e293b; margin: 0 0 16px 0; }
+.quick-queue-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1024px) { .quick-queue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .quick-queue-grid { grid-template-columns: 1fr; } }
+.quick-queue-card { text-align: left; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #fff; cursor: pointer; }
+.quick-queue-card-active { border-color: #818cf8; background: #eef2ff; }
+.quick-queue-title { margin: 0; font-size: 13px; color: #475569; font-weight: 600; }
+.quick-queue-count { margin: 6px 0 0 0; font-size: 22px; color: #1e293b; font-weight: 700; }
 .filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1024px) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 768px) { .filter-grid { grid-template-columns: 1fr; } }
@@ -258,10 +350,12 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .badge-pending { color: #92400e; background: #fffbeb; }
 .badge-paid { color: #166534; background: #dcfce7; }
+.badge-refund_requested { color: #9a3412; background: #ffedd5; }
 .badge-shipping { color: #1d4ed8; background: #dbeafe; }
 .badge-completed { color: #0f766e; background: #ccfbf1; }
 .badge-cancelled { color: #991b1b; background: #fee2e2; }
 .badge-waiting-repay { color: #b45309; background: #fef3c7; margin-left: 6px; }
+.status-next-step { margin: 6px 0 0 0; font-size: 12px; color: #64748b; }
 .action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
 .action-detail { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
 .pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; }
