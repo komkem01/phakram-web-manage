@@ -15,14 +15,21 @@ export function useSystemCategories() {
     return code === '200' || code === 200
   }
 
-  function getAuthHeader() {
+  function getAuthHeaders() {
     if (!process.client) {
-      return ''
+      return {
+        'ngrok-skip-browser-warning': 'true'
+      }
     }
 
     const token = localStorage.getItem('access_token')
     const tokenType = localStorage.getItem('token_type') || 'Bearer'
-    return token ? `${tokenType} ${token}` : ''
+    const authorization = token ? `${tokenType} ${token}` : ''
+
+    return {
+      'ngrok-skip-browser-warning': 'true',
+      ...(authorization ? { Authorization: authorization } : {})
+    }
   }
 
   function isUnauthorizedError(error: unknown) {
@@ -41,10 +48,7 @@ export function useSystemCategories() {
     try {
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          'ngrok-skip-browser-warning': 'true',
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     } catch (error) {
       if (!isUnauthorizedError(error)) {
@@ -60,10 +64,7 @@ export function useSystemCategories() {
 
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          'ngrok-skip-browser-warning': 'true',
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     }
   }

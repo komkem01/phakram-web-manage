@@ -13,13 +13,19 @@ export function useProfile() {
     return code === '200' || code === 200
   }
 
-  function getAuthHeader() {
+  function getAuthHeaders() {
     if (process.client) {
       const token = localStorage.getItem('access_token')
       const tokenType = localStorage.getItem('token_type') || 'Bearer'
-      return token ? `${tokenType} ${token}` : ''
+      const authorization = token ? `${tokenType} ${token}` : ''
+      return {
+        'ngrok-skip-browser-warning': 'true',
+        ...(authorization ? { Authorization: authorization } : {})
+      }
     }
-    return ''
+    return {
+      'ngrok-skip-browser-warning': 'true'
+    }
   }
 
   function isUnauthorizedError(error: unknown) {
@@ -40,9 +46,7 @@ export function useProfile() {
     try {
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     } catch (error) {
       if (!isUnauthorizedError(error)) {
@@ -58,9 +62,7 @@ export function useProfile() {
 
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     }
   }

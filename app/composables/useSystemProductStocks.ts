@@ -14,11 +14,21 @@ export function useSystemProductStocks() {
     return code === '200' || code === 200
   }
 
-  function getAuthHeader() {
-    if (!process.client) return ''
+  function getAuthHeaders() {
+    if (!process.client) {
+      return {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    }
+
     const token = localStorage.getItem('access_token')
     const tokenType = localStorage.getItem('token_type') || 'Bearer'
-    return token ? `${tokenType} ${token}` : ''
+    const authorization = token ? `${tokenType} ${token}` : ''
+
+    return {
+      'ngrok-skip-browser-warning': 'true',
+      ...(authorization ? { Authorization: authorization } : {})
+    }
   }
 
   function isUnauthorizedError(error: unknown) {
@@ -30,8 +40,7 @@ export function useSystemProductStocks() {
   }
 
   async function fetchWithAuthRetry<T>(requestUrl: string, options: Omit<Parameters<typeof $fetch<T>>[1], 'headers'> = {}) {
-    const authHeader = getAuthHeader()
-    const requestHeaders = authHeader ? { Authorization: authHeader } : {}
+    const requestHeaders = getAuthHeaders()
 
     try {
       return await $fetch<T>(requestUrl, { ...options, headers: requestHeaders })
@@ -45,8 +54,7 @@ export function useSystemProductStocks() {
         throw error
       }
 
-      const refreshedAuthHeader = getAuthHeader()
-      const refreshedRequestHeaders = refreshedAuthHeader ? { Authorization: refreshedAuthHeader } : {}
+      const refreshedRequestHeaders = getAuthHeaders()
       return await $fetch<T>(requestUrl, { ...options, headers: refreshedRequestHeaders })
     }
   }

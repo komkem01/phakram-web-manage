@@ -9,6 +9,12 @@ export function useAdminAuth() {
   const errorMessage = ref('')
   const successMessage = ref('')
 
+  function getNgrokHeaders() {
+    return {
+      'ngrok-skip-browser-warning': 'true'
+    }
+  }
+
   function setAuthTokens(data: AuthResponse['data']) {
     const now = Math.floor(Date.now() / 1000)
     const accessMaxAge = Math.max(data.access_expires_at - now, 0)
@@ -91,6 +97,7 @@ export function useAdminAuth() {
 
       const response = await $fetch<AuthResponse>(requestUrl, {
         method: 'POST',
+        headers: getNgrokHeaders(),
         body: credentials
       })
 
@@ -134,6 +141,7 @@ export function useAdminAuth() {
 
       const response = await $fetch<AuthResponse>(requestUrl, {
         method: 'POST',
+        headers: getNgrokHeaders(),
         body: {
           refresh_token: storedRefreshToken
         }

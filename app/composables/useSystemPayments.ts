@@ -15,11 +15,21 @@ export function useSystemPayments() {
     return code === '200' || code === 200
   }
 
-  function getAuthHeader() {
-    if (!process.client) return ''
+  function getAuthHeaders() {
+    if (!process.client) {
+      return {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    }
+
     const token = localStorage.getItem('access_token')
     const tokenType = localStorage.getItem('token_type') || 'Bearer'
-    return token ? `${tokenType} ${token}` : ''
+    const authorization = token ? `${tokenType} ${token}` : ''
+
+    return {
+      'ngrok-skip-browser-warning': 'true',
+      ...(authorization ? { Authorization: authorization } : {})
+    }
   }
 
   function isUnauthorizedError(error: unknown) {
@@ -32,7 +42,7 @@ export function useSystemPayments() {
 
   async function fetchWithAuthRetry<T>(requestUrl: string, options: Omit<Parameters<typeof $fetch<T>>[1], 'headers'> = {}) {
     try {
-      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+      return await $fetch<T>(requestUrl, { ...options, headers: getAuthHeaders() })
     } catch (error) {
       if (!isUnauthorizedError(error)) throw error
 
@@ -43,7 +53,7 @@ export function useSystemPayments() {
         throw error
       }
 
-      return await $fetch<T>(requestUrl, { ...options, headers: { Authorization: getAuthHeader() } })
+      return await $fetch<T>(requestUrl, { ...options, headers: getAuthHeaders() })
     }
   }
 

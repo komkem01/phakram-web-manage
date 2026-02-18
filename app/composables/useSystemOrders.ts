@@ -19,11 +19,21 @@ export function useSystemOrders() {
     return code === '200' || code === 200
   }
 
-  function getAuthHeader() {
-    if (!process.client) return ''
+  function getAuthHeaders() {
+    if (!process.client) {
+      return {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    }
+
     const token = localStorage.getItem('access_token')
     const tokenType = localStorage.getItem('token_type') || 'Bearer'
-    return token ? `${tokenType} ${token}` : ''
+    const authorization = token ? `${tokenType} ${token}` : ''
+
+    return {
+      'ngrok-skip-browser-warning': 'true',
+      ...(authorization ? { Authorization: authorization } : {})
+    }
   }
 
   function isUnauthorizedError(error: unknown) {
@@ -50,9 +60,7 @@ export function useSystemOrders() {
     try {
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     } catch (error) {
       if (!isUnauthorizedError(error)) throw error
@@ -66,9 +74,7 @@ export function useSystemOrders() {
 
       return await $fetch<T>(requestUrl, {
         ...options,
-        headers: {
-          Authorization: getAuthHeader()
-        }
+        headers: getAuthHeaders()
       })
     }
   }
