@@ -161,7 +161,10 @@ async function handleLogout() {
               ธนาคาร
             </NuxtLink>
             <NuxtLink to="/settings/payment" class="nav-subitem" @click="isSidebarOpen = false">
-              Payment
+              การชำระเงิน
+            </NuxtLink>
+            <NuxtLink to="/settings/system-bank-account" class="nav-subitem" @click="isSidebarOpen = false">
+              บัญชีธนาคารระบบ
             </NuxtLink>
           </div>
         </div>

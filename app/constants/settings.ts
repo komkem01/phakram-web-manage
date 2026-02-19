@@ -9,6 +9,7 @@ export const SETTINGS_CONFIG = {
     statuses: '/system/statuses',
     tiers: '/system/tiers',
     banks: '/system/banks',
+    systemBankAccounts: '/system/system_bank_accounts',
     payments: '/system/payments',
     productStocks: '/system/product_stocks',
     members: '/auth/members',

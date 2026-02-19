@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { OrderStatus } from '~/types/settings'
+import type { SystemOrderQuickQueueCounts } from '~/composables/useSystemOrders'
 
 definePageMeta({ layout: 'dashboard' })
 
-const { isLoading, errorMessage, orders, paginate, fetchOrders } = useSystemOrders()
+const { isLoading, errorMessage, orders, paginate, fetchOrders, fetchQuickQueueCounts } = useSystemOrders()
 const { toShortCode } = useShortCode()
 
 const currentPage = ref(1)
@@ -31,15 +32,15 @@ const statusOptions: Array<{ label: string, value: OrderStatus }> = [
 
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
 
-const quickQueueCounts = computed(() => {
-  const waitingReview = orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_submitted)).length
-  const waitingRepay = orders.value.filter(item => item.status === 'pending' && Boolean(item.payment_rejected) && !Boolean(item.payment_submitted)).length
-  const readyShip = orders.value.filter(item => item.status === 'paid').length
-  const refundRequested = orders.value.filter(item => item.status === 'refund_requested').length
-  const shipping = orders.value.filter(item => item.status === 'shipping').length
-  const completed = orders.value.filter(item => item.status === 'completed').length
-  const cancelled = orders.value.filter(item => item.status === 'cancelled').length
-  return { waitingReview, waitingRepay, readyShip, refundRequested, shipping, completed, cancelled }
+const quickQueueCounts = ref<SystemOrderQuickQueueCounts>({
+  waitingReview: 0,
+  waitingRepay: 0,
+  readyShip: 0,
+  refundRequested: 0,
+  shipping: 0,
+  completed: 0,
+  cancelled: 0,
+  all: 0
 })
 
 const displayedOrders = computed(() => {
@@ -140,6 +141,15 @@ async function load(page = 1) {
   if (end) params.end_date = end
 
   await fetchOrders(params)
+
+  const countParams: Record<string, unknown> = {}
+  if (searchKeyword.value.trim()) countParams.search = searchKeyword.value.trim()
+  if (memberIdFilter.value.trim()) countParams.member_id = memberIdFilter.value.trim()
+  if (statusFilter.value) countParams.status = statusFilter.value
+  if (start) countParams.start_date = start
+  if (end) countParams.end_date = end
+
+  quickQueueCounts.value = await fetchQuickQueueCounts(countParams)
 }
 
 function handleSearch() {
@@ -220,7 +230,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           </button>
           <button class="quick-queue-card" :class="{ 'quick-queue-card-active': quickQueue === 'all' }" @click="setQuickQueue('all')">
             <p class="quick-queue-title">ทั้งหมด</p>
-            <p class="quick-queue-count">{{ orders.length }}</p>
+            <p class="quick-queue-count">{{ quickQueueCounts.all }}</p>
           </button>
         </div>
       </div>

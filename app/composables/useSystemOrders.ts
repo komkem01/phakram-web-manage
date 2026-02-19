@@ -1,6 +1,17 @@
 import type { ApiPaginate, ApiResponse, BankItem, MemberBankItem, Order, OrderItem, OrderListParams, OrderPaymentDetail, OrderTimelineItem, ProductItem, StorageFileItem, SystemPaymentItem } from '~/types/settings'
 import { SETTINGS_CONFIG } from '~/constants/settings'
 
+export interface SystemOrderQuickQueueCounts {
+  waitingReview: number
+  waitingRepay: number
+  readyShip: number
+  refundRequested: number
+  shipping: number
+  completed: number
+  cancelled: number
+  all: number
+}
+
 export function useSystemOrders() {
   const config = useRuntimeConfig()
   const { refreshAccessToken, logout } = useAdminAuth()
@@ -207,6 +218,136 @@ export function useSystemOrders() {
     } finally {
       isLoading.value = false
     }
+  }
+
+  function buildQuickQueueBaseParams(params: OrderListParams = {}) {
+    return {
+      member_id: params.member_id,
+      search: params.search,
+      status: params.status,
+      start_date: params.start_date,
+      end_date: params.end_date
+    }
+  }
+
+  async function fetchOrdersTotal(params: OrderListParams = {}) {
+    const response = await fetchWithAuthRetry<ApiResponse<Order[]>>(buildListUrl({
+      ...params,
+      page: 1,
+      size: 1,
+      sort_by: params.sort_by || 'created_at',
+      order_by: params.order_by || 'desc'
+    }), { method: 'GET' })
+
+    if (!isSuccessCode(response.code)) {
+      throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
+    }
+
+    return Number(response.paginate?.total || response.data?.length || 0)
+  }
+
+  async function fetchPendingReviewCounts(params: OrderListParams = {}) {
+    let waitingReview = 0
+    let waitingRepay = 0
+
+    const size = 100
+    const baseParams = {
+      ...params,
+      status: 'pending',
+      sort_by: params.sort_by || 'created_at',
+      order_by: params.order_by || 'desc'
+    }
+
+    const firstResponse = await fetchWithAuthRetry<ApiResponse<Order[]>>(buildListUrl({
+      ...baseParams,
+      page: 1,
+      size
+    }), { method: 'GET' })
+
+    if (!isSuccessCode(firstResponse.code)) {
+      throw new Error(firstResponse.message || SETTINGS_CONFIG.messages.loadError)
+    }
+
+    const collect = (items: Order[]) => {
+      for (const item of items) {
+        const submitted = Boolean(item.payment_submitted)
+        const rejected = Boolean(item.payment_rejected)
+        if (submitted) waitingReview += 1
+        if (rejected && !submitted) waitingRepay += 1
+      }
+    }
+
+    collect(firstResponse.data || [])
+
+    const pendingTotal = Number(firstResponse.paginate?.total || firstResponse.data?.length || 0)
+    const totalPages = pendingTotal > 0 ? Math.ceil(pendingTotal / size) : 1
+
+    for (let page = 2; page <= totalPages; page += 1) {
+      const response = await fetchWithAuthRetry<ApiResponse<Order[]>>(buildListUrl({
+        ...baseParams,
+        page,
+        size
+      }), { method: 'GET' })
+
+      if (!isSuccessCode(response.code)) {
+        throw new Error(response.message || SETTINGS_CONFIG.messages.loadError)
+      }
+
+      collect(response.data || [])
+    }
+
+    return { waitingReview, waitingRepay }
+  }
+
+  async function fetchQuickQueueCounts(params: OrderListParams = {}): Promise<SystemOrderQuickQueueCounts> {
+    const baseParams = buildQuickQueueBaseParams(params)
+    const scopedStatus = String(baseParams.status || '').trim()
+
+    const totals: SystemOrderQuickQueueCounts = {
+      waitingReview: 0,
+      waitingRepay: 0,
+      readyShip: 0,
+      refundRequested: 0,
+      shipping: 0,
+      completed: 0,
+      cancelled: 0,
+      all: 0
+    }
+
+    totals.all = await fetchOrdersTotal(baseParams)
+
+    if (scopedStatus) {
+      if (scopedStatus === 'pending') {
+        const pendingCounts = await fetchPendingReviewCounts(baseParams)
+        totals.waitingReview = pendingCounts.waitingReview
+        totals.waitingRepay = pendingCounts.waitingRepay
+      }
+      if (scopedStatus === 'paid') totals.readyShip = totals.all
+      if (scopedStatus === 'refund_requested') totals.refundRequested = totals.all
+      if (scopedStatus === 'shipping') totals.shipping = totals.all
+      if (scopedStatus === 'completed') totals.completed = totals.all
+      if (scopedStatus === 'cancelled') totals.cancelled = totals.all
+      return totals
+    }
+
+    const [paid, refundRequested, shipping, completed, cancelled, pendingCounts] = await Promise.all([
+      fetchOrdersTotal({ ...baseParams, status: 'paid' }),
+      fetchOrdersTotal({ ...baseParams, status: 'refund_requested' }),
+      fetchOrdersTotal({ ...baseParams, status: 'shipping' }),
+      fetchOrdersTotal({ ...baseParams, status: 'completed' }),
+      fetchOrdersTotal({ ...baseParams, status: 'cancelled' }),
+      fetchPendingReviewCounts(baseParams)
+    ])
+
+    totals.readyShip = paid
+    totals.refundRequested = refundRequested
+    totals.shipping = shipping
+    totals.completed = completed
+    totals.cancelled = cancelled
+    totals.waitingReview = pendingCounts.waitingReview
+    totals.waitingRepay = pendingCounts.waitingRepay
+
+    return totals
   }
 
   async function fetchOrderById(id: string) {
@@ -480,6 +621,7 @@ export function useSystemOrders() {
     fetchOrders,
     fetchOrderById,
     fetchOrderItems,
+    fetchQuickQueueCounts,
     fetchOrderItemsByOrderId,
     fetchOrderTimeline,
     fetchOrderPaymentDetail,

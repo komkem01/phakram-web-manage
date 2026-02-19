@@ -199,6 +199,31 @@ export interface SystemPaymentPayload {
   status: 'pending' | 'success' | 'failed' | 'refunded'
 }
 
+export interface SystemBankAccountItem {
+  id: string
+  bank_id: string
+  bank_name_th?: string
+  bank_name_en?: string
+  account_name: string
+  account_no: string
+  branch?: string
+  is_active: boolean
+  is_default_receive: boolean
+  is_default_refund: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface SystemBankAccountPayload {
+  bank_id: string
+  account_name: string
+  account_no: string
+  branch: string
+  is_active: boolean
+  is_default_receive: boolean
+  is_default_refund: boolean
+}
+
 export interface CategoryItem {
   id: string
   parent_id?: string | null
@@ -223,9 +248,29 @@ export interface ProductItem {
   name_en: string
   product_no: string
   price: string | number
+  image_url?: string
+  image_urls?: string[]
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ProductImageItem {
+  id: string
+  file_id: string
+  file_name: string
+  file_path: string
+  file_type: string
+  file_size: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductImageUploadPayload {
+  file_name: string
+  file_type: string
+  file_size: number
+  file_base64: string
 }
 
 export interface ProductPayload {

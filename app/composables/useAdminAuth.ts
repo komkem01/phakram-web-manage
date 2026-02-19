@@ -51,6 +51,23 @@ export function useAdminAuth() {
   }
 
   function logout() {
+    if (process.client) {
+      const token = localStorage.getItem('access_token')
+      const tokenTypeValue = localStorage.getItem('token_type') || 'Bearer'
+      const authorization = token ? `${tokenTypeValue} ${token}` : ''
+      const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+
+      if (authorization) {
+        void $fetch(`${apiBaseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            ...getNgrokHeaders(),
+            Authorization: authorization
+          }
+        }).catch(() => undefined)
+      }
+    }
+
     const accessToken = useCookie<string | null>('access_token', {
       sameSite: 'lax',
       secure: isSecureCookie,
