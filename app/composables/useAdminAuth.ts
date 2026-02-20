@@ -1,6 +1,8 @@
 import type { LoginCredentials, AuthResponse } from '~/types/auth'
 import { AUTH_CONFIG } from '~/constants/auth'
 
+let refreshInFlight: Promise<boolean> | null = null
+
 export function useAdminAuth() {
   const config = useRuntimeConfig()
   const isSecureCookie = process.env.NODE_ENV === 'production'
@@ -143,36 +145,52 @@ export function useAdminAuth() {
   }
 
   async function refreshAccessToken() {
-    try {
-      const storedRefreshToken = process.client
-        ? localStorage.getItem('refresh_token')
-        : useCookie<string | null>('refresh_token').value
-
-      if (!storedRefreshToken) {
-        return false
-      }
-
-      const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
-      const endpoint = AUTH_CONFIG.endpoints.refresh
-      const requestUrl = `${apiBaseUrl}${endpoint}`
-
-      const response = await $fetch<AuthResponse>(requestUrl, {
-        method: 'POST',
-        headers: getNgrokHeaders(),
-        body: {
-          refresh_token: storedRefreshToken
-        }
-      })
-
-      if (response.code !== '200' || !response.data?.access_token) {
-        return false
-      }
-
-      setAuthTokens(response.data)
-      return true
-    } catch {
-      return false
+    if (refreshInFlight) {
+      return refreshInFlight
     }
+
+    refreshInFlight = (async () => {
+      try {
+        const refreshTokenCookie = useCookie<string | null>('refresh_token', {
+          sameSite: 'lax',
+          secure: isSecureCookie,
+          default: () => null
+        })
+
+        const refreshTokenFromCookie = refreshTokenCookie.value
+        const refreshTokenFromStorage = process.client ? localStorage.getItem('refresh_token') : null
+        const storedRefreshToken = (refreshTokenFromCookie || refreshTokenFromStorage || '').trim()
+
+        if (!storedRefreshToken) {
+          return false
+        }
+
+        const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+        const endpoint = AUTH_CONFIG.endpoints.refresh
+        const requestUrl = `${apiBaseUrl}${endpoint}`
+
+        const response = await $fetch<AuthResponse>(requestUrl, {
+          method: 'POST',
+          headers: getNgrokHeaders(),
+          body: {
+            refresh_token: storedRefreshToken
+          }
+        })
+
+        if ((response.code !== '200' && response.code !== 200) || !response.data?.access_token) {
+          return false
+        }
+
+        setAuthTokens(response.data)
+        return true
+      } catch {
+        return false
+      } finally {
+        refreshInFlight = null
+      }
+    })()
+
+    return refreshInFlight
   }
 
   return {

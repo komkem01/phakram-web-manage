@@ -207,6 +207,7 @@ export interface SystemBankAccountItem {
   account_name: string
   account_no: string
   branch?: string
+  qr_image_url?: string
   is_active: boolean
   is_default_receive: boolean
   is_default_refund: boolean
@@ -219,6 +220,7 @@ export interface SystemBankAccountPayload {
   account_name: string
   account_no: string
   branch: string
+  qr_image_url: string
   is_active: boolean
   is_default_receive: boolean
   is_default_refund: boolean

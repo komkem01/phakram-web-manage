@@ -44,6 +44,11 @@ export function useSystemUsers() {
     if (!message) return fallback
     const value = message.trim().toLowerCase()
     if (value === 'invalid role') return 'บทบาทผู้ใช้งานไม่ถูกต้อง'
+    if (value === 'เบอร์โทรซ้ำ') return 'เบอร์โทรซ้ำ'
+    if (value.includes('phone') && value.includes('duplicate')) return 'เบอร์โทรซ้ำ'
+    if (value.includes('phone') && value.includes('already')) return 'เบอร์โทรซ้ำ'
+    if (value.includes('phone') && value.includes('unique')) return 'เบอร์โทรซ้ำ'
+    if (value.includes('เบอร์โทร') && value.includes('ซ้ำ')) return 'เบอร์โทรซ้ำ'
     return message
   }
 

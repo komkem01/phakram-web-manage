@@ -11,6 +11,7 @@ const form = reactive<SystemBankAccountPayload>({
   account_name: '',
   account_no: '',
   branch: '',
+  qr_image_url: '',
   is_active: true,
   is_default_receive: false,
   is_default_refund: false
@@ -23,6 +24,7 @@ const isSubmitting = ref(false)
 const editingId = ref<string | null>(null)
 const isDeleteModalOpen = ref(false)
 const pendingDeleteId = ref<string | null>(null)
+const qrFileName = ref('')
 
 const toast = reactive({ show: false, type: 'success' as 'success' | 'error' | 'warning', message: '' })
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -36,6 +38,8 @@ function resetForm() {
   form.account_name = ''
   form.account_no = ''
   form.branch = ''
+  form.qr_image_url = ''
+  qrFileName.value = ''
   form.is_active = true
   form.is_default_receive = false
   form.is_default_refund = false
@@ -50,9 +54,45 @@ function startEditRow(id: string) {
   form.account_name = item.account_name
   form.account_no = item.account_no
   form.branch = item.branch || ''
+  form.qr_image_url = item.qr_image_url || ''
+  qrFileName.value = ''
   form.is_active = item.is_active
   form.is_default_receive = item.is_default_receive
   form.is_default_refund = item.is_default_refund
+}
+
+async function onSelectQrFile(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target?.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    showToast('warning', 'กรุณาเลือกไฟล์รูปภาพเท่านั้น')
+    target.value = ''
+    return
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('warning', 'ไฟล์รูป QR ต้องไม่เกิน 5 MB')
+    target.value = ''
+    return
+  }
+
+  const reader = new FileReader()
+  const base64 = await new Promise<string>((resolve, reject) => {
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('อ่านไฟล์รูป QR ไม่สำเร็จ'))
+    reader.readAsDataURL(file)
+  })
+
+  form.qr_image_url = base64
+  qrFileName.value = file.name
+  target.value = ''
+}
+
+function clearQrImage() {
+  form.qr_image_url = ''
+  qrFileName.value = ''
 }
 
 function showToast(type: 'success' | 'error' | 'warning', message: string) {
@@ -90,6 +130,7 @@ async function handleSubmit() {
     account_name: form.account_name.trim(),
     account_no: form.account_no.trim(),
     branch: form.branch.trim(),
+    qr_image_url: form.qr_image_url.trim(),
     is_active: form.is_active,
     is_default_receive: form.is_default_receive,
     is_default_refund: form.is_default_refund
@@ -168,6 +209,27 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <label for="branch">สาขา</label>
             <input id="branch" v-model="form.branch" type="text" :disabled="isSubmitting">
           </div>
+          <div class="form-group">
+            <label for="qr_image_file">รูป QR รับชำระ</label>
+            <input id="qr_image_file" type="file" accept="image/*" :disabled="isSubmitting" @change="onSelectQrFile">
+            <p class="text-xs text-slate-500">รองรับไฟล์ภาพไม่เกิน 5 MB</p>
+            <p v-if="qrFileName" class="text-xs text-slate-500">ไฟล์ที่เลือก: {{ qrFileName }}</p>
+          </div>
+        </div>
+
+        <div v-if="form.qr_image_url" class="qr-preview-section">
+          <p class="mb-2 text-sm font-semibold text-slate-700">ตัวอย่าง QR Code</p>
+          <div class="qr-preview-card">
+            <div class="qr-preview-inner">
+              <img :src="form.qr_image_url" alt="system-payment-qr-preview" class="qr-preview-img">
+            </div>
+          </div>
+          <div class="mt-8">
+            <button type="button" class="btn-danger-soft" :disabled="isSubmitting" @click="clearQrImage">
+              <svg style="width: 16px; height: 16px; margin-right: 6px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              ลบรูป QR
+            </button>
+          </div>
         </div>
 
         <div class="checkbox-row">
@@ -194,14 +256,22 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 
         <div v-else class="table-wrapper">
           <table class="data-table">
-            <thead><tr><th>ธนาคาร</th><th>ชื่อบัญชี</th><th>เลขบัญชี</th><th>สาขา</th><th>สถานะ</th><th>ค่าตั้งต้น</th><th class="actions-col">จัดการ</th></tr></thead>
+            <thead><tr><th>ธนาคาร</th><th>ชื่อบัญชี</th><th>เลขบัญชี</th><th>สาขา</th><th>QR</th><th>สถานะ</th><th>ค่าตั้งต้น</th><th class="actions-col">จัดการ</th></tr></thead>
             <tbody>
-              <tr v-if="bankAccounts.length === 0"><td colspan="7" class="empty-cell">ไม่พบข้อมูล</td></tr>
+              <tr v-if="bankAccounts.length === 0"><td colspan="8" class="empty-cell">ไม่พบข้อมูล</td></tr>
               <tr v-for="item in bankAccounts" :key="item.id">
                 <td>{{ item.bank_name_th || item.bank_name_en || bankDisplayName(item.bank_id) }}</td>
                 <td>{{ item.account_name }}</td>
                 <td>{{ item.account_no }}</td>
                 <td>{{ item.branch || '-' }}</td>
+                <td>
+                  <a v-if="item.qr_image_url" :href="item.qr_image_url" target="_blank" rel="noopener noreferrer" class="qr-thumbnail-link">
+                    <div class="qr-thumbnail-wrapper">
+                      <img :src="item.qr_image_url" alt="system-payment-qr-thumbnail" class="qr-thumbnail-img">
+                    </div>
+                  </a>
+                  <span v-else class="text-slate-400">—</span>
+                </td>
                 <td><span class="badge" :class="item.is_active ? 'badge-success' : 'badge-muted'">{{ item.is_active ? 'ใช้งาน' : 'ปิดใช้งาน' }}</span></td>
                 <td>
                   <span v-if="item.is_default_receive" class="badge badge-default">รับเงิน</span>
@@ -251,25 +321,48 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
 .form-group { display: flex; flex-direction: column; gap: 8px; }
 .form-group label { font-size: 14px; font-weight: 600; color: #334155; }
-.form-group input,.form-group select { height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; }
-.checkbox-row { margin-top: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
-.checkbox-group { display: inline-flex; align-items: center; gap: 8px; color: #334155; }
+.form-group input,.form-group select { height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; transition: all 0.2s ease; }
+.form-group input:focus,.form-group select:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+.form-group input:hover:not(:disabled),.form-group select:hover:not(:disabled) { border-color: #a78bfa; }
+.checkbox-row { margin-top: 16px; display: flex; gap: 18px; flex-wrap: wrap; }
+.checkbox-group { display: inline-flex; align-items: center; gap: 8px; color: #334155; cursor: pointer; transition: color 0.2s ease; }
+.checkbox-group:hover { color: #1e293b; }
+.checkbox-group input[type="checkbox"] { cursor: pointer; width: 16px; height: 16px; }
 .form-actions { margin-top: 16px; display: flex; gap: 10px; }
-.btn-submit,.btn-secondary { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
+.btn-submit,.btn-secondary { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all 0.2s ease; }
 .btn-submit { color: #fff; background: #4f46e5; }
+.btn-submit:hover:not(:disabled) { background: #4338ca; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
 .btn-secondary { color: #334155; background: #f8fafc; border-color: #d1d5db; }
+.btn-secondary:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; }
+.btn-danger-soft { display: inline-flex; align-items: center; height: 36px; border-radius: 8px; padding: 0 12px; font-size: 13px; font-weight: 600; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626; cursor: pointer; transition: all 0.2s ease; }
+.btn-danger-soft:hover:not(:disabled) { background: #fee2e2; border-color: #fca5a5; transform: translateY(-1px); }
+.qr-preview-section { margin-top: 12px; }
+.qr-preview-card { display: inline-block; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; box-shadow: 0 10px 25px rgba(102, 126, 234, 0.25); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+.qr-preview-card:hover { transform: translateY(-4px); box-shadow: 0 15px 35px rgba(102, 126, 234, 0.35); }
+.qr-preview-inner { padding: 6px; background: #ffffff; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.qr-preview-img { width: 120px; height: 120px; object-fit: contain; }
+.qr-thumbnail-link { display: inline-flex; text-decoration: none; }
+.qr-thumbnail-wrapper { position: relative; width: 24px; height: 24px; border-radius: 6px; overflow: hidden; border: 2px solid #e2e8f0; background: #ffffff; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.qr-thumbnail-wrapper:hover { transform: scale(2.5); border-color: #a78bfa; box-shadow: 0 10px 25px rgba(167, 139, 250, 0.4); z-index: 10; }
+.qr-thumbnail-img { width: 100%; height: 100%; object-fit: contain; padding: 1px; }
 .divider { border-top: 1px solid #e2e8f0; }
 .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
 .data-table { width: 100%; border-collapse: collapse; }
-.data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; }
+.data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; transition: background-color 0.2s ease; }
 .data-table th { background: #f8fafc; font-weight: 700; }
+.data-table tbody tr { transition: background-color 0.2s ease; }
+.data-table tbody tr:hover { background: #f8fafc; }
 .empty-cell { text-align: center !important; color: #64748b !important; }
 .actions-col { width: 160px; text-align: center !important; }
-.action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
+.action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; font-size: 13px; transition: all 0.2s ease; }
+.action-link:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
 .action-edit { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.action-edit:hover { background: #fef3c7; border-color: #fbbf24; }
 .action-delete { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
-.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.action-delete:hover { background: #fee2e2; border-color: #fca5a5; }
+.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; transition: transform 0.2s ease; }
+.badge:hover { transform: scale(1.05); }
 .badge-success { color: #166534; background: #dcfce7; }
 .badge-muted { color: #475569; background: #e2e8f0; }
 .badge-default { color: #1d4ed8; background: #dbeafe; margin-right: 6px; }
