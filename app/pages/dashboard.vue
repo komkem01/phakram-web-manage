@@ -11,7 +11,6 @@ const orderItemsApi = useSystemOrders()
 const usersApi = useSystemUsers()
 const productsApi = useSystemProducts()
 const productCatalogApi = useSystemProducts()
-const productStocksApi = useSystemProductStocks()
 const { toShortCode } = useShortCode()
 
 const isLoading = ref(false)
@@ -19,7 +18,7 @@ const isTopProductsLoading = ref(false)
 const isTopSectionLoading = ref(false)
 const topRange = ref<'all' | 'today' | '7d' | '30d'>('7d')
 const topProductsToday = ref<Array<{ productId: string, productName: string, productNo: string, quantity: number, amount: number }>>([])
-const lowStockThreshold = 10
+const newOrderHours = 24
 
 function formatMoney(value: number) {
   return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -197,6 +196,64 @@ const insightCards = computed(() => ([
 
 const recentOrders = computed(() => allOrdersApi.orders.value.slice(0, 5))
 
+const adminNotificationCounts = computed(() => {
+  const now = Date.now()
+  const newOrderCount = allOrdersApi.orders.value.filter((order) => {
+    const createdAtTime = new Date(order.created_at).getTime()
+    if (Number.isNaN(createdAtTime)) return false
+    const diffHours = (now - createdAtTime) / (1000 * 60 * 60)
+    return diffHours >= 0 && diffHours <= newOrderHours
+  }).length
+
+  const cancelledCount = allOrdersApi.orders.value.filter((order) => String(order.status) === 'cancelled').length
+  const waitingReviewCount = allOrdersApi.orders.value.filter((order) => String(order.status) === 'pending' && Boolean(order.payment_submitted)).length
+
+  return {
+    newOrderCount,
+    cancelledCount,
+    waitingReviewCount,
+    total: newOrderCount + cancelledCount + waitingReviewCount
+  }
+})
+
+const orderStatusSummary = computed(() => {
+  const rows = [
+    { status: 'pending', label: 'รอดำเนินการ', count: 0 },
+    { status: 'paid', label: 'ชำระแล้ว', count: 0 },
+    { status: 'shipping', label: 'กำลังจัดส่ง', count: 0 },
+    { status: 'completed', label: 'สำเร็จ', count: 0 },
+    { status: 'cancelled', label: 'ยกเลิก', count: 0 },
+    { status: 'refund_requested', label: 'คำขอคืนเงิน', count: 0 }
+  ]
+
+  for (const order of allOrdersApi.orders.value) {
+    const row = rows.find((item) => item.status === String(order.status))
+    if (row) row.count += 1
+  }
+
+  return rows.filter((item) => item.count > 0)
+})
+
+function formatOrderStatus(status: string) {
+  if (status === 'pending') return 'รอดำเนินการ'
+  if (status === 'paid') return 'ชำระแล้ว'
+  if (status === 'shipping') return 'กำลังจัดส่ง'
+  if (status === 'completed') return 'สำเร็จ'
+  if (status === 'cancelled') return 'ยกเลิก'
+  if (status === 'refund_requested') return 'คำขอคืนเงิน'
+  return status || '-'
+}
+
+function orderStatusClass(status: string) {
+  if (status === 'cancelled') return 'alert-status-cancelled'
+  if (status === 'pending') return 'alert-status-pending'
+  if (status === 'paid') return 'alert-status-paid'
+  if (status === 'shipping') return 'alert-status-shipping'
+  if (status === 'completed') return 'alert-status-completed'
+  if (status === 'refund_requested') return 'alert-status-refund'
+  return 'alert-status-default'
+}
+
 const topRangeLabel = computed(() => {
   if (topRange.value === 'today') return 'วันนี้'
   if (topRange.value === '7d') return '7 วัน'
@@ -233,42 +290,6 @@ const productMap = computed(() => {
   }
   return map
 })
-
-const lowStockProducts = computed(() => {
-  const normalizedStocks = productStocksApi.stocks.value
-    .map((stock) => {
-      const remaining = Number(stock.remaining)
-      const stockAmount = Number(stock.stock_amount)
-
-      return {
-        productId: stock.product_id,
-        productName: productMap.value.get(stock.product_id)?.name || '-',
-        productNo: productMap.value.get(stock.product_id)?.no || '-',
-        remaining: Number.isNaN(remaining) ? 0 : remaining,
-        stockAmount: Number.isNaN(stockAmount) ? 0 : stockAmount
-      }
-    })
-    .sort((left, right) => left.remaining - right.remaining)
-
-  const lowStockOnly = normalizedStocks.filter((stock) => stock.remaining <= lowStockThreshold)
-  if (lowStockOnly.length > 0) {
-    return lowStockOnly.slice(0, 10)
-  }
-
-  return normalizedStocks.slice(0, 10)
-})
-
-function stockLevelClass(remaining: number) {
-  if (remaining <= 0) return 'low-stock-card-danger'
-  if (remaining <= lowStockThreshold) return 'low-stock-card-warning'
-  return 'low-stock-card-normal'
-}
-
-function stockLevelLabel(remaining: number) {
-  if (remaining <= 0) return 'หมดสต็อก'
-  if (remaining <= lowStockThreshold) return 'ใกล้หมด'
-  return 'ปกติ'
-}
 
 function customerReference(memberId: string) {
   return toShortCode(memberId, 'MEM')
@@ -343,32 +364,34 @@ async function refreshTopSection() {
 
 async function loadDashboard() {
   isLoading.value = true
-  await Promise.all([
-    dailyOrdersApi.fetchOrders({
-      page: 1,
-      size: 1000,
-      sort_by: 'created_at',
-      order_by: 'desc',
-      start_date: startOfTodayUnix(),
-      end_date: endOfTodayUnix()
-    }),
-    weeklyOrdersApi.fetchOrders({
-      page: 1,
-      size: 2000,
-      sort_by: 'created_at',
-      order_by: 'desc',
-      start_date: startOfDaysAgoUnix(6),
-      end_date: endOfTodayUnix()
-    }),
-    allOrdersApi.fetchOrders({ page: 1, size: 5, sort_by: 'created_at', order_by: 'desc' }),
-    usersApi.fetchUsers({ page: 1, size: 1, role: 'customer', sort_by: 'created_at', order_by: 'desc' }),
-    productsApi.fetchProducts({ page: 1, size: 1, sort_by: 'created_at', order_by: 'desc' }),
-    productCatalogApi.fetchProducts({ page: 1, size: 3000, sort_by: 'created_at', order_by: 'desc' }),
-    productStocksApi.fetchStocks({ page: 1, size: 3000, sort_by: 'remaining', order_by: 'asc' })
-  ])
+  try {
+    await Promise.all([
+      dailyOrdersApi.fetchOrders({
+        page: 1,
+        size: 1000,
+        sort_by: 'created_at',
+        order_by: 'desc',
+        start_date: startOfTodayUnix(),
+        end_date: endOfTodayUnix()
+      }),
+      weeklyOrdersApi.fetchOrders({
+        page: 1,
+        size: 2000,
+        sort_by: 'created_at',
+        order_by: 'desc',
+        start_date: startOfDaysAgoUnix(6),
+        end_date: endOfTodayUnix()
+      }),
+      allOrdersApi.fetchOrders({ page: 1, size: 200, sort_by: 'created_at', order_by: 'desc' }),
+      usersApi.fetchUsers({ page: 1, size: 1, role: 'customer', sort_by: 'created_at', order_by: 'desc' }),
+      productsApi.fetchProducts({ page: 1, size: 1, sort_by: 'created_at', order_by: 'desc' }),
+      productCatalogApi.fetchProducts({ page: 1, size: 3000, sort_by: 'created_at', order_by: 'desc' })
+    ])
+  } finally {
+    isLoading.value = false
+  }
 
   await loadTopSection()
-  isLoading.value = false
 }
 
 watch(topRange, async () => {
@@ -429,6 +452,53 @@ onMounted(async () => {
     <div class="analysis-grid">
       <div class="content-section">
         <div class="section-header">
+          <h2 class="section-title">แจ้งเตือนผู้ดูแลระบบ</h2>
+          <NuxtLink class="alert-link-all" to="/orders">ดูทั้งหมด</NuxtLink>
+        </div>
+
+        <div class="admin-alert-grid">
+          <NuxtLink class="admin-alert-card alert-card-new" to="/orders">
+            <p class="admin-alert-title">คำสั่งซื้อใหม่ ({{ newOrderHours }} ชม.)</p>
+            <p class="admin-alert-value">{{ adminNotificationCounts.newOrderCount }}</p>
+          </NuxtLink>
+          <NuxtLink class="admin-alert-card alert-card-review" to="/orders?status=pending">
+            <p class="admin-alert-title">ชำระแล้วรอตรวจ</p>
+            <p class="admin-alert-value">{{ adminNotificationCounts.waitingReviewCount }}</p>
+          </NuxtLink>
+          <NuxtLink class="admin-alert-card alert-card-cancelled" to="/orders?status=cancelled">
+            <p class="admin-alert-title">คำสั่งซื้อยกเลิก</p>
+            <p class="admin-alert-value">{{ adminNotificationCounts.cancelledCount }}</p>
+          </NuxtLink>
+        </div>
+
+        <div v-if="allOrdersApi.isLoading.value" class="placeholder-box">
+          <p class="placeholder-text">กำลังโหลดการแจ้งเตือน...</p>
+        </div>
+        <div v-else-if="recentOrders.length === 0" class="placeholder-box">
+          <p class="placeholder-text">ยังไม่มีการแจ้งเตือนคำสั่งซื้อ</p>
+        </div>
+        <div v-else class="alert-list">
+          <NuxtLink v-for="order in recentOrders" :key="order.id" class="alert-item" :to="`/orders/${order.id}`">
+            <div>
+              <p class="alert-order-no">{{ order.order_no }}</p>
+              <p class="alert-order-time">{{ new Date(order.created_at).toLocaleString('th-TH') }}</p>
+            </div>
+            <div class="alert-right">
+              <span class="alert-status" :class="orderStatusClass(String(order.status))">{{ formatOrderStatus(String(order.status)) }}</span>
+              <p class="alert-order-amount">฿{{ formatMoney(Number(order.net_amount || 0)) }}</p>
+            </div>
+          </NuxtLink>
+        </div>
+
+        <div v-if="orderStatusSummary.length" class="alert-status-summary">
+          <span v-for="item in orderStatusSummary" :key="item.status" class="alert-summary-pill">
+            {{ item.label }} {{ item.count }}
+          </span>
+        </div>
+      </div>
+
+      <div class="content-section">
+        <div class="section-header">
           <h2 class="section-title">สัดส่วนสถานะคำสั่งซื้อวันนี้</h2>
         </div>
         <div class="status-list">
@@ -460,26 +530,26 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="content-section">
-      <div class="section-header">
-        <h2 class="section-title">กิจกรรมล่าสุด</h2>
-      </div>
-      <div v-if="isLoading" class="placeholder-box">
-        <p class="placeholder-text">กำลังโหลดข้อมูล...</p>
-      </div>
-      <div v-else-if="recentOrders.length === 0" class="placeholder-box">
-        <p class="placeholder-text">ยังไม่มีคำสั่งซื้อล่าสุด</p>
-      </div>
-      <div v-else class="recent-list">
-        <NuxtLink v-for="order in recentOrders" :key="order.id" class="recent-item" :to="`/orders/${order.id}`">
-          <div>
-            <p class="recent-no">{{ order.order_no }}</p>
-            <p class="recent-date">{{ new Date(order.created_at).toLocaleString('th-TH') }}</p>
-          </div>
-          <p class="recent-amount">฿{{ Number(order.net_amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</p>
-        </NuxtLink>
+      <div class="content-section">
+        <div class="section-header">
+          <h2 class="section-title">กิจกรรมล่าสุด</h2>
+        </div>
+        <div v-if="isLoading" class="placeholder-box">
+          <p class="placeholder-text">กำลังโหลดข้อมูล...</p>
+        </div>
+        <div v-else-if="recentOrders.length === 0" class="placeholder-box">
+          <p class="placeholder-text">ยังไม่มีคำสั่งซื้อล่าสุด</p>
+        </div>
+        <div v-else class="recent-list">
+          <NuxtLink v-for="order in recentOrders" :key="order.id" class="recent-item" :to="`/orders/${order.id}`">
+            <div>
+              <p class="recent-no">{{ order.order_no }}</p>
+              <p class="recent-date">{{ new Date(order.created_at).toLocaleString('th-TH') }}</p>
+            </div>
+            <p class="recent-amount">฿{{ Number(order.net_amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</p>
+          </NuxtLink>
+        </div>
       </div>
     </div>
 
@@ -539,29 +609,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="content-section">
-      <div class="section-header">
-        <h2 class="section-title">สินค้าใกล้หมดสต็อก</h2>
-      </div>
-
-      <div v-if="isLoading || productStocksApi.isLoading" class="placeholder-box">
-        <p class="placeholder-text">กำลังโหลดข้อมูลสต็อก...</p>
-      </div>
-      <div v-else-if="productStocksApi.errorMessage" class="placeholder-box">
-        <p class="placeholder-text">{{ productStocksApi.errorMessage }}</p>
-      </div>
-      <div v-else-if="lowStockProducts.length === 0" class="placeholder-box">
-        <p class="placeholder-text">ยังไม่มีสินค้าที่ใกล้หมดสต็อก</p>
-      </div>
-      <div v-else class="low-stock-grid">
-        <div v-for="item in lowStockProducts" :key="item.productId" class="low-stock-card" :class="stockLevelClass(item.remaining)">
-          <p class="low-stock-name">{{ item.productName }}</p>
-          <p class="low-stock-no">{{ item.productNo }}</p>
-          <p class="low-stock-remaining">คงเหลือ {{ item.remaining }} / {{ item.stockAmount }}</p>
-          <p class="low-stock-badge">{{ stockLevelLabel(item.remaining) }}</p>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -619,6 +666,34 @@ onMounted(async () => {
 .top-range-filter select { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 8px; background: #fff; }
 .btn-top-refresh { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc; color: #334155; padding: 0 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-top-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+.alert-link-all { color: #1d4ed8; text-decoration: none; font-size: 13px; font-weight: 700; }
+
+.admin-alert-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
+@media (min-width: 768px) { .admin-alert-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.admin-alert-card { border-radius: 10px; border: 1px solid transparent; padding: 12px; text-decoration: none; }
+.admin-alert-title { margin: 0; font-size: 13px; color: #334155; }
+.admin-alert-value { margin: 4px 0 0 0; font-size: 24px; font-weight: 700; color: #0f172a; }
+.alert-card-new { background: #eff6ff; border-color: #bfdbfe; }
+.alert-card-review { background: #fffbeb; border-color: #fde68a; }
+.alert-card-cancelled { background: #fef2f2; border-color: #fecaca; }
+
+.alert-list { display: flex; flex-direction: column; gap: 10px; }
+.alert-item { display: flex; align-items: center; justify-content: space-between; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; text-decoration: none; background: #f8fafc; }
+.alert-order-no { margin: 0; color: #0f172a; font-size: 14px; font-weight: 700; }
+.alert-order-time { margin: 4px 0 0; color: #64748b; font-size: 12px; }
+.alert-right { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; }
+.alert-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+.alert-status-pending { color: #92400e; background: #fef3c7; }
+.alert-status-paid { color: #1d4ed8; background: #dbeafe; }
+.alert-status-shipping { color: #0f766e; background: #ccfbf1; }
+.alert-status-completed { color: #166534; background: #dcfce7; }
+.alert-status-cancelled { color: #991b1b; background: #fee2e2; }
+.alert-status-refund { color: #6d28d9; background: #ede9fe; }
+.alert-status-default { color: #334155; background: #e2e8f0; }
+.alert-order-amount { margin: 0; color: #0f766e; font-size: 13px; font-weight: 700; }
+
+.alert-status-summary { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.alert-summary-pill { display: inline-flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 999px; background: #f8fafc; color: #334155; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 
 .status-list { display: flex; flex-direction: column; gap: 12px; }
 .status-row { display: flex; flex-direction: column; gap: 6px; }
@@ -635,20 +710,6 @@ onMounted(async () => {
 .recent-no { margin: 0; color: #0f172a; font-weight: 600; font-size: 14px; }
 .recent-date { margin: 4px 0 0 0; color: #64748b; font-size: 12px; }
 .recent-amount { margin: 0; color: #0f766e; font-weight: 700; font-size: 14px; }
-.low-stock-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 12px; }
-@media (min-width: 768px) { .low-stock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1280px) { .low-stock-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.low-stock-card { border-radius: 10px; padding: 12px; }
-.low-stock-name { margin: 0; font-size: 14px; font-weight: 700; color: #0f172a; }
-.low-stock-no { margin: 4px 0 0 0; font-size: 12px; color: #64748b; }
-.low-stock-remaining { margin: 6px 0 0 0; font-size: 13px; color: #334155; }
-.low-stock-badge { margin: 10px 0 0 0; font-size: 12px; font-weight: 700; }
-.low-stock-card-danger { border: 1px solid #fecaca; background: #fff5f5; }
-.low-stock-card-danger .low-stock-badge { color: #dc2626; }
-.low-stock-card-warning { border: 1px solid #fde68a; background: #fffbeb; }
-.low-stock-card-warning .low-stock-badge { color: #b45309; }
-.low-stock-card-normal { border: 1px solid #bbf7d0; background: #f0fdf4; }
-.low-stock-card-normal .low-stock-badge { color: #15803d; }
 
 @media (min-width: 768px) {
   .page-title { font-size: 32px; }

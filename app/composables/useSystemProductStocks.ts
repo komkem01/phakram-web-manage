@@ -77,7 +77,29 @@ export function useSystemProductStocks() {
     isLoading.value = true
 
     try {
-      const response = await fetchWithAuthRetry<ApiResponse<ProductStockItem[]>>(buildUrl(params), { method: 'GET' })
+      const requestUrl = buildUrl({
+        page: params.page || 1,
+        size: params.size || 3000,
+        sort_by: params.sort_by || 'remaining',
+        order_by: params.order_by || 'asc'
+      })
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
+
+      let response: ApiResponse<ProductStockItem[]>
+      try {
+        response = await $fetch<ApiResponse<ProductStockItem[]>>(requestUrl, {
+          method: 'GET',
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+          signal: controller.signal
+        })
+      } catch {
+        response = await fetchWithAuthRetry<ApiResponse<ProductStockItem[]>>(requestUrl, { method: 'GET' })
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
       if (!isSuccessCode(response.code)) throw new Error(response.message || 'ไม่สามารถโหลดข้อมูลสต็อกได้')
 
       stocks.value = response.data || []

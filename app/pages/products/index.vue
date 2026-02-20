@@ -5,6 +5,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const { isLoading, errorMessage, successMessage, products, paginate, fetchProducts, createProduct, updateProduct, deleteProduct } = useSystemProducts()
 const categoryApi = useSystemCategories()
+const productStocksApi = useSystemProductStocks()
 
 const form = reactive<ProductPayload>({ category_id: '', name_th: '', name_en: '', price: '', is_active: true })
 const currentPage = ref(1)
@@ -16,12 +17,39 @@ const isDeleteModalOpen = ref(false)
 const pendingDeleteId = ref<string | null>(null)
 
 const categoryMap = computed(() => categoryApi.categories.value.reduce<Record<string, string>>((acc, item) => { acc[item.id] = item.name_th; return acc }, {}))
+const stockRemainingMap = computed(() => productStocksApi.stocks.value.reduce<Record<string, number>>((acc, item) => {
+  const productID = String(item.product_id || '').trim()
+  if (productID) acc[productID] = Number(item.remaining || 0)
+  return acc
+}, {}))
 
 const toast = reactive({ show: false, type: 'success' as 'success' | 'error' | 'warning', message: '' })
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 const isEditing = computed(() => Boolean(editingId.value))
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
+const lowStockThreshold = 10
+const outOfStockCount = computed(() => productStocksApi.stocks.value.filter((item) => Number(item.remaining) <= 0).length)
+const lowStockCount = computed(() => productStocksApi.stocks.value.filter((item) => {
+  const remaining = Number(item.remaining)
+  return remaining > 0 && remaining <= lowStockThreshold
+}).length)
+
+function stockLevelClass(remainingValue: number | string | undefined) {
+  const remaining = Number(remainingValue)
+  if (Number.isNaN(remaining)) return 'stock-badge-muted'
+  if (remaining <= 0) return 'stock-badge-danger'
+  if (remaining <= lowStockThreshold) return 'stock-badge-warning'
+  return 'stock-badge-normal'
+}
+
+function stockLevelLabel(remainingValue: number | string | undefined) {
+  const remaining = Number(remainingValue)
+  if (Number.isNaN(remaining)) return '-'
+  if (remaining <= 0) return 'หมดแล้ว'
+  if (remaining <= lowStockThreshold) return 'ใกล้หมด'
+  return 'ปกติ'
+}
 
 function resetForm() {
   editingId.value = null
@@ -54,7 +82,14 @@ function showToast(type: 'success' | 'error' | 'warning', message: string) {
 
 async function load(page = 1) {
   currentPage.value = page
-  await fetchProducts({ page, size: pageSize.value, sort_by: 'created_at', order_by: 'desc' })
+  await Promise.all([
+    fetchProducts({ page, size: pageSize.value, sort_by: 'created_at', order_by: 'desc' }),
+    loadStocks()
+  ])
+}
+
+async function loadStocks() {
+  await productStocksApi.fetchStocks({ page: 1, size: 3000, sort_by: 'remaining', order_by: 'asc' })
 }
 
 function handlePageSizeChange() {
@@ -177,19 +212,32 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           <button class="btn-secondary" :disabled="isLoading" @click="load(currentPage)">รีเฟรช</button>
         </div>
 
+        <div class="stock-alert-row">
+          <span class="stock-alert-pill stock-alert-danger">หมดสต๊อก {{ outOfStockCount }} รายการ</span>
+          <span class="stock-alert-pill stock-alert-warning">ใกล้หมด (≤ {{ lowStockThreshold }}) {{ lowStockCount }} รายการ</span>
+        </div>
+
         <div v-if="isLoading" class="loading-container"><div class="loading-spinner"></div><p>กำลังโหลดข้อมูล...</p></div>
 
         <div v-else class="table-wrapper">
           <table class="data-table">
-            <thead><tr><th>รหัสสินค้า</th><th>ชื่อ (ไทย)</th><th>ชื่อ (อังกฤษ)</th><th>หมวดหมู่</th><th>ราคา</th><th>สถานะ</th><th class="actions-col">จัดการ</th></tr></thead>
+            <thead><tr><th>รหัสสินค้า</th><th>ชื่อ (ไทย)</th><th>ชื่อ (อังกฤษ)</th><th>หมวดหมู่</th><th>ราคา</th><th>คงเหลือ</th><th>สถานะ</th><th class="actions-col">จัดการ</th></tr></thead>
             <tbody>
-              <tr v-if="products.length === 0"><td colspan="7" class="empty-cell">ไม่พบข้อมูล</td></tr>
+              <tr v-if="products.length === 0"><td colspan="8" class="empty-cell">ไม่พบข้อมูล</td></tr>
               <tr v-for="item in products" :key="item.id">
                 <td>{{ item.product_no }}</td>
                 <td>{{ item.name_th }}</td>
                 <td>{{ item.name_en }}</td>
                 <td>{{ categoryMap[item.category_id] || '-' }}</td>
                 <td>{{ item.price }}</td>
+                <td>
+                  <span class="stock-cell-badge" :class="stockLevelClass(stockRemainingMap[item.id])">
+                    {{ stockRemainingMap[item.id] ?? '-' }}
+                  </span>
+                  <span class="stock-cell-label" :class="stockLevelClass(stockRemainingMap[item.id])">
+                    {{ stockLevelLabel(stockRemainingMap[item.id]) }}
+                  </span>
+                </td>
                 <td><span class="badge" :class="item.is_active ? 'badge-success' : 'badge-muted'">{{ item.is_active ? 'ใช้งาน' : 'ปิดใช้งาน' }}</span></td>
                 <td class="actions-col">
                   <NuxtLink class="action-link action-detail" :to="`/products/${item.id}/detail`">รายละเอียด</NuxtLink>
@@ -254,11 +302,21 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .btn-submit:disabled,.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 .divider { border-top: 1px solid #e2e8f0; }
 .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.stock-alert-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.stock-alert-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
+.stock-alert-danger { color: #991b1b; background: #fee2e2; border: 1px solid #fca5a5; }
+.stock-alert-warning { color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; }
 .table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; }
 .data-table th { background: #f8fafc; font-weight: 700; }
 .empty-cell { text-align: center !important; color: #64748b !important; }
+.stock-cell-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 24px; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700; margin-right: 6px; }
+.stock-cell-label { font-size: 11px; font-weight: 700; }
+.stock-badge-danger { color: #991b1b; background: #fee2e2; }
+.stock-badge-warning { color: #92400e; background: #fef3c7; }
+.stock-badge-normal { color: #166534; background: #dcfce7; }
+.stock-badge-muted { color: #64748b; background: #e2e8f0; }
 .actions-col { width: 280px; text-align: center !important; }
 .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .badge-success { color: #166534; background: #dcfce7; }
