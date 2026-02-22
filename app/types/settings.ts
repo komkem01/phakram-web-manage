@@ -425,6 +425,26 @@ export interface OrderListParams extends ListParams {
   end_date?: number
 }
 
+export interface ContactMessageItem {
+  id: string
+  name: string
+  email: string
+  subject: string
+  message: string
+  send_status: string
+  is_read: boolean
+  send_error?: string | null
+  sent_at?: string | null
+  read_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ContactMessageListParams extends ListParams {
+  send_status?: string
+  read_status?: 'read' | 'unread' | ''
+}
+
 export interface ListParams {
   page?: number
   size?: number

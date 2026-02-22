@@ -13,6 +13,7 @@ export const SETTINGS_CONFIG = {
     payments: '/system/payments',
     productStocks: '/system/product_stocks',
     members: '/auth/members',
+    contactMessages: '/auth/contact-messages',
     orders: '/auth/orders',
     categories: '/system/categories',
     products: '/system/products'

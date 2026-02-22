@@ -5,6 +5,16 @@ const openDropdowns = ref<string[]>([])
 const isLogoutModalOpen = ref(false)
 const { logout } = useAdminAuth()
 const { profile, fetchProfile } = useProfile()
+const route = useRoute()
+const { unreadCount, fetchUnreadCount } = useContactMessages()
+
+const unreadCountLabel = computed(() => {
+  if (unreadCount.value > 99) {
+    return '99+'
+  }
+
+  return String(unreadCount.value)
+})
 
 const displayName = computed(() => {
   if (!profile.value) {
@@ -35,6 +45,7 @@ const displayRole = computed(() => {
 
 onMounted(() => {
   void fetchProfile()
+  void fetchUnreadCount()
 
   const setReady = () => {
     isPageReady.value = true
@@ -48,6 +59,13 @@ onMounted(() => {
 
   window.addEventListener('load', setReady)
 })
+
+watch(
+  () => route.fullPath,
+  () => {
+    void fetchUnreadCount()
+  }
+)
 
 function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -242,6 +260,15 @@ async function handleLogout() {
         </div>
 
         <!-- ตั้งค่าข้อมูลส่วนตัว -->
+        <NuxtLink to="/contact-messages" class="nav-item" @click="isSidebarOpen = false">
+          <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>ข้อความติดต่อ</span>
+          <span v-if="unreadCount > 0" class="nav-badge">{{ unreadCountLabel }}</span>
+        </NuxtLink>
+
+        <!-- ตั้งค่าข้อมูลส่วนตัว -->
         <NuxtLink to="/profile" class="nav-item" @click="isSidebarOpen = false">
           <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -345,7 +372,13 @@ async function handleLogout() {
   flex-direction: column;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar {
+    width: 248px;
+  }
+}
+
+@media (min-width: 1200px) {
   .sidebar {
     transform: translateX(0);
   }
@@ -418,6 +451,22 @@ async function handleLogout() {
   box-sizing: border-box;
   cursor: pointer;
   position: relative;
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .nav-item:hover {
@@ -523,7 +572,7 @@ async function handleLogout() {
   z-index: 30;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .sidebar-overlay {
     display: none;
   }
@@ -539,9 +588,15 @@ async function handleLogout() {
   overflow: hidden;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .main-layout {
     margin-left: 280px;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1279px) {
+  .main-layout {
+    margin-left: 248px;
   }
 }
 
@@ -577,7 +632,7 @@ async function handleLogout() {
   background: #f1f5f9;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .menu-button {
     display: none;
   }
@@ -713,19 +768,84 @@ async function handleLogout() {
 .main-content {
   flex: 1;
   min-height: 0;
-  padding: 24px;
+  padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 @media (min-width: 768px) {
   .main-content {
-    padding: 32px;
+    padding: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .main-content {
+    padding: 28px;
   }
 }
 
 @media (min-width: 1440px) {
   .main-content {
     padding: 40px;
+  }
+}
+
+.main-content :deep(.settings-page),
+.main-content :deep(.dashboard-page),
+.main-content :deep(.profile-page),
+.main-content :deep(.order-detail-page) {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.main-content :deep(.content-card) {
+  min-width: 0;
+}
+
+.main-content :deep(.table-wrapper) {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.main-content :deep(.data-table) {
+  min-width: 760px;
+}
+
+.main-content :deep(.table-header),
+.main-content :deep(.pagination-row),
+.main-content :deep(.section-header) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 1023px) {
+  .main-content :deep(.form-grid),
+  .main-content :deep(.filter-grid),
+  .main-content :deep(.quick-queue-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .main-content :deep(.form-grid),
+  .main-content :deep(.filter-grid),
+  .main-content :deep(.quick-queue-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  .main-content :deep(.data-table) {
+    min-width: 680px;
+  }
+
+  .main-content :deep(.toast-notification) {
+    left: 12px;
+    right: 12px;
+    min-width: auto;
+    max-width: none;
   }
 }
 </style>

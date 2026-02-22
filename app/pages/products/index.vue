@@ -225,7 +225,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             <tbody>
               <tr v-if="products.length === 0"><td colspan="8" class="empty-cell">ไม่พบข้อมูล</td></tr>
               <tr v-for="item in products" :key="item.id">
-                <td>{{ item.product_no }}</td>
+                <td class="product-no">{{ item.product_no }}</td>
                 <td>{{ item.name_th }}</td>
                 <td>{{ item.name_en }}</td>
                 <td>{{ categoryMap[item.category_id] || '-' }}</td>
@@ -239,11 +239,13 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
                   </span>
                 </td>
                 <td><span class="badge" :class="item.is_active ? 'badge-success' : 'badge-muted'">{{ item.is_active ? 'ใช้งาน' : 'ปิดใช้งาน' }}</span></td>
-                <td class="actions-col">
-                  <NuxtLink class="action-link action-detail" :to="`/products/${item.id}/detail`">รายละเอียด</NuxtLink>
-                  <NuxtLink class="action-link action-stock" :to="`/products/${item.id}/stock`">สต๊อก</NuxtLink>
-                  <button class="action-link action-edit" @click="startEditRow(item.id)">แก้ไข</button>
-                  <button class="action-link action-delete" @click="openDeleteModal(item.id)">ลบ</button>
+                <td class="actions-col actions-cell">
+                  <div class="actions-grid">
+                    <NuxtLink class="action-link action-detail" :to="`/products/${item.id}/detail`">รายละเอียด</NuxtLink>
+                    <NuxtLink class="action-link action-stock" :to="`/products/${item.id}/stock`">สต๊อก</NuxtLink>
+                    <button type="button" class="action-link action-edit" @click="startEditRow(item.id)">แก้ไข</button>
+                    <button type="button" class="action-link action-delete" @click="openDeleteModal(item.id)">ลบ</button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -294,6 +296,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .form-group input:focus,.form-group select:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12); }
 .checkbox-group { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; color: #334155; }
 .form-actions { margin-top: 16px; display: flex; gap: 10px; }
+.form-actions { flex-wrap: wrap; }
 .btn-submit,.btn-secondary { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
 .btn-submit { color: #fff; background: #4f46e5; }
 .btn-submit:hover { background: #4338ca; }
@@ -301,16 +304,31 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .btn-secondary:hover { background: #f1f5f9; }
 .btn-submit:disabled,.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 .divider { border-top: 1px solid #e2e8f0; }
-.table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
 .stock-alert-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .stock-alert-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
 .stock-alert-danger { color: #991b1b; background: #fee2e2; border: 1px solid #fca5a5; }
 .stock-alert-warning { color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; }
-.table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
-.data-table { width: 100%; border-collapse: collapse; }
+.table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e2e8f0; border-radius: 10px; }
+.data-table { width: 100%; min-width: 1020px; border-collapse: collapse; }
 .data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; }
 .data-table th { background: #f8fafc; font-weight: 700; }
+.data-table th:nth-child(1),
+.data-table td:nth-child(1) { min-width: 110px; }
+.data-table th:nth-child(2),
+.data-table td:nth-child(2),
+.data-table th:nth-child(3),
+.data-table td:nth-child(3) { min-width: 120px; }
+.data-table th:nth-child(4),
+.data-table td:nth-child(4) { min-width: 100px; }
+.data-table th:nth-child(5),
+.data-table td:nth-child(5) { min-width: 80px; }
+.data-table th:nth-child(6),
+.data-table td:nth-child(6) { min-width: 110px; }
+.data-table th:nth-child(7),
+.data-table td:nth-child(7) { min-width: 90px; }
 .empty-cell { text-align: center !important; color: #64748b !important; }
+.product-no { white-space: nowrap; font-weight: 600; }
 .stock-cell-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 24px; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700; margin-right: 6px; }
 .stock-cell-label { font-size: 11px; font-weight: 700; }
 .stock-badge-danger { color: #991b1b; background: #fee2e2; }
@@ -318,15 +336,18 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .stock-badge-normal { color: #166534; background: #dcfce7; }
 .stock-badge-muted { color: #64748b; background: #e2e8f0; }
 .actions-col { width: 280px; text-align: center !important; }
+.actions-cell { white-space: normal; padding-top: 10px !important; padding-bottom: 10px !important; }
+.actions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 186px; margin: 0 auto; }
 .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .badge-success { color: #166534; background: #dcfce7; }
 .badge-muted { color: #64748b; background: #e2e8f0; }
-.action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
+.action-link { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid transparent; background: transparent; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; margin-right: 0; text-decoration: none; box-sizing: border-box; transition: transform 0.15s ease, filter 0.15s ease; }
+.action-link:hover { filter: brightness(0.98); transform: translateY(-1px); }
 .action-detail { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
 .action-stock { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
 .action-edit { color: #b45309; background: #fffbeb; border-color: #fde68a; }
 .action-delete { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
-.pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; }
+.pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; flex-wrap: wrap; }
 .page-size-control { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
 .page-size-control select { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 8px; background: #fff; }
 .loading-container { display: flex; align-items: center; gap: 10px; color: #64748b; }
@@ -344,6 +365,50 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .confirm-modal-title { margin: 0 0 8px 0; font-size: 18px; font-weight: 700; color: #1e293b; }
 .confirm-modal-text { margin: 0; color: #475569; font-size: 14px; }
 .confirm-modal-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
+
+@media (max-width: 1023px) {
+  .page-title {
+    font-size: 24px;
+  }
+
+  .section-title {
+    font-size: 17px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-section {
+    padding: 18px;
+  }
+
+  .actions-col {
+    width: 220px;
+    min-width: 220px;
+  }
+
+  .actions-grid {
+    width: 176px;
+    gap: 6px;
+  }
+
+  .action-link {
+    margin-bottom: 0;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 767px) {
+  .pagination-row {
+    justify-content: flex-start;
+  }
+}
 .btn-danger { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; color: #fff; background: #dc2626; }
 .btn-danger:hover { background: #b91c1c; }
 </style>

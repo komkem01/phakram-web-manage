@@ -439,6 +439,13 @@ onBeforeUnmount(() => {
   gap: 8px;
   border-bottom: 2px solid #e2e8f0;
   padding-bottom: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-button {
@@ -455,6 +462,8 @@ onBeforeUnmount(() => {
   border-bottom: 3px solid transparent;
   margin-bottom: -2px;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab-button:hover {
@@ -544,6 +553,43 @@ onBeforeUnmount(() => {
 @media (min-width: 640px) {
   .form-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 1023px) {
+  .page-header {
+    margin-bottom: 20px;
+  }
+
+  .card-section {
+    padding: 18px;
+  }
+
+  .section-title {
+    font-size: 17px;
+  }
+
+  .info-row {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 767px) {
+  .tab-button {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .info-row {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 0;
+  }
+
+  .badge-role,
+  .badge-status {
+    display: inline-flex;
+    align-items: center;
   }
 }
 

@@ -659,9 +659,9 @@ onMounted(async () => {
 .insight-value { margin: 0; font-size: 24px; font-weight: 700; color: #0f172a; }
 
 .section-header { margin-bottom: 16px; }
-.section-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .section-title { font-size: 18px; font-weight: 600; color: #1e293b; margin: 0; }
-.top-controls { display: inline-flex; align-items: center; gap: 8px; }
+.top-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .top-range-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; }
 .top-range-filter select { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 8px; background: #fff; }
 .btn-top-refresh { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc; color: #334155; padding: 0 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -669,7 +669,8 @@ onMounted(async () => {
 .alert-link-all { color: #1d4ed8; text-decoration: none; font-size: 13px; font-weight: 700; }
 
 .admin-alert-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
-@media (min-width: 768px) { .admin-alert-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 768px) { .admin-alert-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .admin-alert-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .admin-alert-card { border-radius: 10px; border: 1px solid transparent; padding: 12px; text-decoration: none; }
 .admin-alert-title { margin: 0; font-size: 13px; color: #334155; }
 .admin-alert-value { margin: 4px 0 0 0; font-size: 24px; font-weight: 700; color: #0f172a; }
@@ -714,5 +715,21 @@ onMounted(async () => {
 @media (min-width: 768px) {
   .page-title { font-size: 32px; }
   .page-subtitle { font-size: 15px; }
+}
+
+@media (max-width: 1023px) {
+  .stat-card,
+  .insight-card,
+  .content-section {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .insight-value {
+    font-size: 21px;
+  }
 }
 </style>

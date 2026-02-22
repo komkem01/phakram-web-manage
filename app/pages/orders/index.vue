@@ -346,11 +346,12 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .form-group label { font-size: 14px; font-weight: 600; color: #334155; }
 .form-group input,.form-group select { height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; }
 .form-actions { margin-top: 16px; display: flex; gap: 10px; }
+.form-actions { flex-wrap: wrap; }
 .btn-submit,.btn-secondary { height: 40px; border-radius: 8px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
 .btn-submit { color: #fff; background: #4f46e5; }
 .btn-secondary { color: #334155; background: #f8fafc; border-color: #d1d5db; }
 .divider { border-top: 1px solid #e2e8f0; }
-.table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 10px; flex-wrap: wrap; }
 .table-wrapper { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th,.data-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; color: #334155; }
@@ -368,7 +369,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .status-next-step { margin: 6px 0 0 0; font-size: 12px; color: #64748b; }
 .action-link { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; cursor: pointer; margin-right: 8px; text-decoration: none; }
 .action-detail { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
-.pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; }
+.pagination-row { margin-top: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; color: #334155; font-size: 14px; flex-wrap: wrap; }
 .page-size-control { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
 .page-size-control select { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 8px; background: #fff; }
 .loading-container { display: flex; align-items: center; gap: 10px; color: #64748b; }
@@ -378,4 +379,25 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
 .toast-error { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
 .toast-success { background: #f0fdf4; color: #166534; border-color: #86efac; }
 .toast-warning { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+
+@media (max-width: 1023px) {
+  .card-section {
+    padding: 18px;
+  }
+
+  .actions-col {
+    width: 200px;
+  }
+
+  .action-link {
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+}
+
+@media (max-width: 767px) {
+  .pagination-row {
+    justify-content: flex-start;
+  }
+}
 </style>
