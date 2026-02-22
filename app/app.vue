@@ -1,6 +1,13 @@
+<script setup lang="ts">
+import { SpeedInsights } from '@vercel/speed-insights/nuxt'
+</script>
+
 <template>
-  <NuxtLayout>
-    <NuxtRouteAnnouncer />
-    <NuxtPage />
-  </NuxtLayout>
+  <div>
+    <NuxtLayout>
+      <NuxtRouteAnnouncer />
+      <NuxtPage />
+    </NuxtLayout>
+    <SpeedInsights />
+  </div>
 </template>
