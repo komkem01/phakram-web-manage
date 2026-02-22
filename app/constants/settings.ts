@@ -14,6 +14,7 @@ export const SETTINGS_CONFIG = {
     productStocks: '/system/product_stocks',
     members: '/auth/members',
     contactMessages: '/auth/contact-messages',
+    contactMessageReplies: '/auth/contact-messages',
     orders: '/auth/orders',
     categories: '/system/categories',
     products: '/system/products'

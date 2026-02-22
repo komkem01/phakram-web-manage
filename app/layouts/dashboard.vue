@@ -259,14 +259,31 @@ async function handleLogout() {
           </div>
         </div>
 
-        <!-- ตั้งค่าข้อมูลส่วนตัว -->
-        <NuxtLink to="/contact-messages" class="nav-item" @click="isSidebarOpen = false">
-          <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>ข้อความติดต่อ</span>
-          <span v-if="unreadCount > 0" class="nav-badge">{{ unreadCountLabel }}</span>
-        </NuxtLink>
+        <!-- จัดการข้อความติดต่อ -->
+        <div class="nav-group">
+          <button
+            class="nav-item nav-dropdown-trigger"
+            :class="{ 'is-open': isDropdownOpen('contacts') }"
+            @click="toggleDropdown('contacts')"
+          >
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>จัดการข้อความติดต่อ</span>
+            <svg class="dropdown-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div class="nav-dropdown" :class="{ 'is-open': isDropdownOpen('contacts') }">
+            <NuxtLink to="/contact-messages" class="nav-subitem nav-subitem-with-badge" @click="isSidebarOpen = false">
+              <span>หน้าข้อความติดต่อ</span>
+              <span v-if="unreadCount > 0" class="nav-subitem-badge">{{ unreadCountLabel }}</span>
+            </NuxtLink>
+            <NuxtLink to="/messages" class="nav-subitem" @click="isSidebarOpen = false">
+              หน้าข้อความ
+            </NuxtLink>
+          </div>
+        </div>
 
         <!-- ตั้งค่าข้อมูลส่วนตัว -->
         <NuxtLink to="/profile" class="nav-item" @click="isSidebarOpen = false">
@@ -562,6 +579,28 @@ async function handleLogout() {
   background: #eef2ff;
   color: #4f46e5;
   font-weight: 600;
+}
+
+.nav-subitem-with-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nav-subitem-badge {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* Sidebar Overlay */

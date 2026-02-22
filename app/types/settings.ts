@@ -445,6 +445,19 @@ export interface ContactMessageListParams extends ListParams {
   read_status?: 'read' | 'unread' | ''
 }
 
+export interface ContactReplyItem {
+  id: string
+  contact_message_id: string
+  sender_role: 'admin' | 'customer' | string
+  sender_name: string
+  message: string
+  created_at: string
+}
+
+export interface ContactReplyPayload {
+  message: string
+}
+
 export interface ListParams {
   page?: number
   size?: number
