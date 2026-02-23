@@ -184,6 +184,9 @@ async function handleLogout() {
             <NuxtLink to="/settings/system-bank-account" class="nav-subitem" @click="isSidebarOpen = false">
               บัญชีธนาคารระบบ
             </NuxtLink>
+            <NuxtLink to="/settings/promotion" class="nav-subitem" @click="isSidebarOpen = false">
+              โปรโมชั่น
+            </NuxtLink>
           </div>
         </div>
 

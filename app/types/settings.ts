@@ -458,6 +458,70 @@ export interface ContactReplyPayload {
   message: string
 }
 
+export interface PromotionItem {
+  id: string
+  code: string
+  name: string
+  description: string
+  discount_type: 'percent' | 'amount' | string
+  discount_value: number
+  max_discount?: number | null
+  min_order_amount: number
+  usage_limit?: number | null
+  usage_per_member?: number | null
+  used_count: number
+  starts_at?: string | null
+  ends_at?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PromotionPayload {
+  code: string
+  name: string
+  description: string
+  discount_type: 'percent' | 'amount'
+  discount_value: number
+  max_discount?: number | null
+  min_order_amount: number
+  usage_limit?: number | null
+  usage_per_member?: number | null
+  starts_at?: string | null
+  ends_at?: string | null
+  is_active: boolean
+}
+
+export interface PromotionListParams extends ListParams {
+  is_active?: boolean
+}
+
+export interface PromotionReportSummary {
+  total_promotions: number
+  active_promotions: number
+  collected_coupons: number
+  used_coupons: number
+  total_discount_amount: number
+}
+
+export interface PromotionUsageItem {
+  id: string
+  promotion_id: string
+  promotion_code: string
+  promotion_name: string
+  member_id: string
+  member_no: string
+  member_name: string
+  order_id?: string
+  order_no?: string
+  discount_amount: number
+  used_at: string
+}
+
+export interface PromotionUsageListParams extends ListParams {
+  promotion_id?: string
+}
+
 export interface ListParams {
   page?: number
   size?: number
