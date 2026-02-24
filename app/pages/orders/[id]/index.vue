@@ -209,6 +209,22 @@ const orderReference = computed(() => {
   return order.value.order_no || toShortCode(order.value.id, 'ORD')
 })
 
+const totalAmountValue = computed(() => Number(order.value?.total_amount || 0))
+const totalDiscountValue = computed(() => Number(order.value?.discount_amount || 0))
+const promotionDiscountValue = computed(() => {
+  const value = Number(order.value?.promotion_discount_amount || 0)
+  if (Number.isNaN(value) || value < 0) return 0
+  return value
+})
+const tierDiscountValue = computed(() => {
+  const fromApi = Number(order.value?.tier_discount_amount)
+  if (!Number.isNaN(fromApi) && fromApi >= 0) return fromApi
+  const fallback = totalDiscountValue.value - promotionDiscountValue.value
+  return fallback > 0 ? fallback : 0
+})
+const netAmountValue = computed(() => Number(order.value?.net_amount || order.value?.total_amount || 0))
+const displayPromotionCode = computed(() => String(order.value?.promotion_code || '').trim())
+
 function isTimelineInRange(createdAt: string, range: 'all' | 'today' | '7d' | '30d') {
   if (range === 'all') return true
 
@@ -460,9 +476,11 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
             </span>
           </div>
           <div class="info-item"><span class="label">สร้างเมื่อ</span><span class="value">{{ formatDateTime(order.created_at) }}</span></div>
-          <div class="info-item"><span class="label">ยอดรวม</span><span class="value">{{ formatMoney(order.total_amount) }}</span></div>
-          <div class="info-item"><span class="label">ส่วนลด</span><span class="value">{{ formatMoney(order.discount_amount) }}</span></div>
-          <div class="info-item"><span class="label">ยอดสุทธิ</span><span class="value">{{ formatMoney(order.net_amount) }}</span></div>
+          <div class="info-item"><span class="label">ยอดรวมสินค้า</span><span class="value">{{ formatMoney(totalAmountValue) }}</span></div>
+          <div class="info-item"><span class="label">ส่วนลดสมาชิก</span><span class="value">{{ formatMoney(tierDiscountValue) }}</span></div>
+          <div class="info-item"><span class="label">ส่วนลดโปรโมชั่น</span><span class="value">{{ formatMoney(promotionDiscountValue) }}<span v-if="displayPromotionCode"> ({{ displayPromotionCode }})</span></span></div>
+          <div class="info-item"><span class="label">ส่วนลดรวม</span><span class="value">{{ formatMoney(totalDiscountValue) }}</span></div>
+          <div class="info-item"><span class="label">ยอดสุทธิ</span><span class="value">{{ formatMoney(netAmountValue) }}</span></div>
         </div>
 
         <div v-if="order.status === 'refund_requested'" class="rejection-box" style="margin-top:12px;">

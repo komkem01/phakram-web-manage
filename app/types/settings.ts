@@ -400,6 +400,9 @@ export interface Order {
   payment_appeal_reason?: string
   refund_rejection_reason?: string
   cancellation_reason?: string
+  promotion_code?: string
+  promotion_discount_amount?: string | number
+  tier_discount_amount?: string | number
   total_amount: string | number
   discount_amount: string | number
   net_amount: string | number
