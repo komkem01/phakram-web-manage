@@ -16,6 +16,7 @@ export const SETTINGS_CONFIG = {
     contactMessages: '/auth/contact-messages',
     contactMessageReplies: '/auth/contact-messages',
     orders: '/auth/orders',
+    reviews: '/auth/reviews',
     promotions: '/auth/promotions',
     promotionReportSummary: '/auth/promotions/report/summary',
     promotionReportUsages: '/auth/promotions/report/usages',

@@ -301,6 +301,23 @@ export interface ProductDetailPayload {
   care_instructions: string
 }
 
+export interface ProductReviewItem {
+  id: string
+  member_id: string
+  member_name: string
+  product_id: string
+  order_id: string
+  order_item_id: string
+  order_no: string
+  rating: number
+  comment: string
+  image_urls?: string[]
+  is_visible: boolean
+  is_verified_purchase?: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ProductStockItem {
   id: string
   product_id: string

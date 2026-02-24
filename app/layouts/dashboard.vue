@@ -234,6 +234,9 @@ async function handleLogout() {
             <NuxtLink to="/products" class="nav-subitem" @click="isSidebarOpen = false">
               หน้าจัดการสินค้า
             </NuxtLink>
+            <NuxtLink to="/reviews" class="nav-subitem" @click="isSidebarOpen = false">
+              หน้าจัดการรีวิว
+            </NuxtLink>
           </div>
         </div>
 
