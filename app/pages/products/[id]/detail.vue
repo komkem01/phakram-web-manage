@@ -74,6 +74,30 @@ async function load() {
   syncForm()
 }
 
+function inferMimeTypeFromName(fileName: string) {
+  const lower = String(fileName || '').toLowerCase().trim()
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.heic')) return 'image/heic'
+  if (lower.endsWith('.heif')) return 'image/heif'
+  return ''
+}
+
+function normalizeImageDataURL(dataUrl: string, file: File) {
+  const value = String(dataUrl || '').trim()
+  if (!value.startsWith('data:') || !value.includes(';base64,')) return value
+  if (!value.startsWith('data:;base64,') && !value.startsWith('data:application/octet-stream;base64,')) {
+    return value
+  }
+
+  const mime = inferMimeTypeFromName(file.name)
+  if (!mime) return value
+
+  const base64Payload = value.split(',', 2)[1] || ''
+  return `data:${mime};base64,${base64Payload}`
+}
+
 async function onSelectProductImage(event: Event) {
   const target = event.target as HTMLInputElement
   const file = target?.files?.[0]
@@ -88,11 +112,13 @@ async function onSelectProductImage(event: Event) {
     reader.readAsDataURL(file)
   })
 
+  const normalizedBase64 = normalizeImageDataURL(base64, file)
+
   await productImagesApi.uploadImage(productId.value, {
     file_name: file.name,
     file_type: file.type || 'image/*',
     file_size: file.size,
-    file_base64: base64
+    file_base64: normalizedBase64
   })
 
   if (target) {
@@ -235,7 +261,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           ref="productImageInput"
           class="image-input-hidden"
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
           :disabled="productImagesApi.isUploading.value"
           @change="onSelectProductImage"
         >
@@ -253,7 +279,7 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           </div>
           <div class="upload-content">
             <p class="upload-title">อัปโหลดรูปสินค้า</p>
-            <p class="upload-subtitle">รองรับ JPG, PNG, WEBP (สูงสุด 5MB)</p>
+            <p class="upload-subtitle">รองรับ JPG, PNG, WEBP, HEIC, HEIF (สูงสุด 5MB)</p>
             <p v-if="selectedImageFileName" class="upload-file-name">ไฟล์ล่าสุด: {{ selectedImageFileName }}</p>
             <p v-if="productImagesApi.isUploading.value" class="upload-status">กำลังอัปโหลดรูป...</p>
           </div>

@@ -21,11 +21,23 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 const isEditing = computed(() => Boolean(editingId.value))
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
 const districtMap = computed(() => districts.value.reduce<Record<string, string>>((acc, item) => { acc[item.id] = item.name; return acc }, {}))
+const districtSearch = ref('')
+
+function syncDistrictIdFromSearch() {
+  const keyword = districtSearch.value.trim().toLowerCase()
+  if (!keyword) {
+    form.district_id = ''
+    return
+  }
+  const matched = districts.value.find((item) => item.name.trim().toLowerCase() === keyword)
+  form.district_id = matched?.id || ''
+}
 
 function resetForm() {
   editingId.value = null
   form.name = ''
   form.district_id = districts.value[0]?.id || ''
+  districtSearch.value = districts.value[0]?.name || ''
   form.is_active = true
 }
 
@@ -35,6 +47,7 @@ function startEditRow(id: string) {
   editingId.value = item.id
   form.name = item.name
   form.district_id = item.district_id
+  districtSearch.value = districtMap.value[item.district_id] || ''
   form.is_active = item.is_active
 }
 
@@ -57,7 +70,12 @@ function handlePageSizeChange() {
 
 async function loadDistricts() {
   await fetchDistricts({ page: 1, size: 100, sort_by: 'created_at', order_by: 'desc' })
-  if (!form.district_id && districts.value.length > 0) form.district_id = districts.value[0].id
+  if (!form.district_id && districts.value.length > 0) {
+    form.district_id = districts.value[0].id
+    districtSearch.value = districts.value[0].name
+    return
+  }
+  districtSearch.value = districtMap.value[form.district_id] || ''
 }
 
 async function handleSubmit() {
@@ -133,10 +151,20 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           </div>
           <div class="form-group">
             <label for="district_id">อำเภอ</label>
-            <select id="district_id" v-model="form.district_id" :disabled="isSubmitting" required>
-              <option value="" disabled>เลือกอำเภอ</option>
-              <option v-for="item in districts" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
+            <input
+              id="district_id"
+              v-model="districtSearch"
+              type="text"
+              list="district-options"
+              :disabled="isSubmitting"
+              placeholder="ค้นหาและเลือกอำเภอ"
+              @input="syncDistrictIdFromSearch"
+              @change="syncDistrictIdFromSearch"
+              required
+            >
+            <datalist id="district-options">
+              <option v-for="item in districts" :key="item.id" :value="item.name" />
+            </datalist>
           </div>
         </div>
 

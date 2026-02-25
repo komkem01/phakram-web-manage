@@ -21,11 +21,23 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 const isEditing = computed(() => Boolean(editingId.value))
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
 const provinceMap = computed(() => provinces.value.reduce<Record<string, string>>((acc, item) => { acc[item.id] = item.name; return acc }, {}))
+const provinceSearch = ref('')
+
+function syncProvinceIdFromSearch() {
+  const keyword = provinceSearch.value.trim().toLowerCase()
+  if (!keyword) {
+    form.province_id = ''
+    return
+  }
+  const matched = provinces.value.find((item) => item.name.trim().toLowerCase() === keyword)
+  form.province_id = matched?.id || ''
+}
 
 function resetForm() {
   editingId.value = null
   form.name = ''
   form.province_id = provinces.value[0]?.id || ''
+  provinceSearch.value = provinces.value[0]?.name || ''
   form.is_active = true
 }
 
@@ -35,6 +47,7 @@ function startEditRow(id: string) {
   editingId.value = item.id
   form.name = item.name
   form.province_id = item.province_id
+  provinceSearch.value = provinceMap.value[item.province_id] || ''
   form.is_active = item.is_active
 }
 
@@ -57,7 +70,12 @@ function handlePageSizeChange() {
 
 async function loadProvinces() {
   await fetchProvinces({ page: 1, size: 100, sort_by: 'created_at', order_by: 'desc' })
-  if (!form.province_id && provinces.value.length > 0) form.province_id = provinces.value[0].id
+  if (!form.province_id && provinces.value.length > 0) {
+    form.province_id = provinces.value[0].id
+    provinceSearch.value = provinces.value[0].name
+    return
+  }
+  provinceSearch.value = provinceMap.value[form.province_id] || ''
 }
 
 async function handleSubmit() {
@@ -133,10 +151,20 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           </div>
           <div class="form-group">
             <label for="province_id">จังหวัด</label>
-            <select id="province_id" v-model="form.province_id" :disabled="isSubmitting" required>
-              <option value="" disabled>เลือกจังหวัด</option>
-              <option v-for="item in provinces" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
+            <input
+              id="province_id"
+              v-model="provinceSearch"
+              type="text"
+              list="province-options"
+              :disabled="isSubmitting"
+              placeholder="ค้นหาและเลือกจังหวัด"
+              @input="syncProvinceIdFromSearch"
+              @change="syncProvinceIdFromSearch"
+              required
+            >
+            <datalist id="province-options">
+              <option v-for="item in provinces" :key="item.id" :value="item.name" />
+            </datalist>
           </div>
         </div>
 

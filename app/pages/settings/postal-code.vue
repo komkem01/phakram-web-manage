@@ -21,11 +21,23 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null
 const isEditing = computed(() => Boolean(editingId.value))
 const totalPages = computed(() => (!paginate.value.size ? 1 : Math.max(1, Math.ceil(paginate.value.total / paginate.value.size))))
 const subDistrictMap = computed(() => subDistricts.value.reduce<Record<string, string>>((acc, item) => { acc[item.id] = item.name; return acc }, {}))
+const subDistrictSearch = ref('')
+
+function syncSubDistrictIdFromSearch() {
+  const keyword = subDistrictSearch.value.trim().toLowerCase()
+  if (!keyword) {
+    form.sub_districts_id = ''
+    return
+  }
+  const matched = subDistricts.value.find((item) => item.name.trim().toLowerCase() === keyword)
+  form.sub_districts_id = matched?.id || ''
+}
 
 function resetForm() {
   editingId.value = null
   form.name = ''
   form.sub_districts_id = subDistricts.value[0]?.id || ''
+  subDistrictSearch.value = subDistricts.value[0]?.name || ''
   form.is_active = true
 }
 
@@ -35,6 +47,7 @@ function startEditRow(id: string) {
   editingId.value = item.id
   form.name = item.name
   form.sub_districts_id = item.sub_districts_id
+  subDistrictSearch.value = subDistrictMap.value[item.sub_districts_id] || ''
   form.is_active = item.is_active
 }
 
@@ -57,7 +70,12 @@ function handlePageSizeChange() {
 
 async function loadSubDistricts() {
   await fetchSubDistricts({ page: 1, size: 100, sort_by: 'created_at', order_by: 'desc' })
-  if (!form.sub_districts_id && subDistricts.value.length > 0) form.sub_districts_id = subDistricts.value[0].id
+  if (!form.sub_districts_id && subDistricts.value.length > 0) {
+    form.sub_districts_id = subDistricts.value[0].id
+    subDistrictSearch.value = subDistricts.value[0].name
+    return
+  }
+  subDistrictSearch.value = subDistrictMap.value[form.sub_districts_id] || ''
 }
 
 async function handleSubmit() {
@@ -133,10 +151,20 @@ onBeforeUnmount(() => { if (toastTimer) clearTimeout(toastTimer) })
           </div>
           <div class="form-group">
             <label for="sub_districts_id">ตำบล</label>
-            <select id="sub_districts_id" v-model="form.sub_districts_id" :disabled="isSubmitting" required>
-              <option value="" disabled>เลือกตำบล</option>
-              <option v-for="item in subDistricts" :key="item.id" :value="item.id">{{ item.name }}</option>
-            </select>
+            <input
+              id="sub_districts_id"
+              v-model="subDistrictSearch"
+              type="text"
+              list="sub-district-options"
+              :disabled="isSubmitting"
+              placeholder="ค้นหาและเลือกตำบล"
+              @input="syncSubDistrictIdFromSearch"
+              @change="syncSubDistrictIdFromSearch"
+              required
+            >
+            <datalist id="sub-district-options">
+              <option v-for="item in subDistricts" :key="item.id" :value="item.name" />
+            </datalist>
           </div>
         </div>
 
