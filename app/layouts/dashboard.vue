@@ -43,8 +43,14 @@ const displayRole = computed(() => {
   return profile.value?.role || 'ไม่ระบุบทบาท'
 })
 
-onMounted(() => {
-  void fetchProfile()
+onMounted(async () => {
+  const loadedProfile = await fetchProfile()
+  if (!loadedProfile || !profile.value?.is_admin) {
+    logout()
+    await navigateTo('/')
+    return
+  }
+
   void fetchUnreadCount()
 
   const setReady = () => {

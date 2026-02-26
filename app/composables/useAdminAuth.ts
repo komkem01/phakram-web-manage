@@ -3,6 +3,14 @@ import { AUTH_CONFIG } from '~/constants/auth'
 
 let refreshInFlight: Promise<boolean> | null = null
 
+type AuthMeResponse = {
+  code: string | number
+  message?: string
+  data?: {
+    is_admin?: boolean
+  }
+}
+
 export function useAdminAuth() {
   const config = useRuntimeConfig()
   const isSecureCookie = process.env.NODE_ENV === 'production'
@@ -50,6 +58,42 @@ export function useAdminAuth() {
       localStorage.setItem('refresh_token', data.refresh_token)
       localStorage.setItem('token_type', data.token_type || 'Bearer')
     }
+  }
+
+  async function validateAdminAccess() {
+    const apiBaseUrl = (config.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') || ''
+    const accessTokenCookie = useCookie<string | null>('access_token', {
+      sameSite: 'lax',
+      secure: isSecureCookie,
+      default: () => null
+    })
+    const tokenTypeCookie = useCookie<string | null>('token_type', {
+      sameSite: 'lax',
+      secure: isSecureCookie,
+      default: () => null
+    })
+
+    const accessToken = (accessTokenCookie.value || (process.client ? localStorage.getItem('access_token') : '') || '').trim()
+    const tokenType = (tokenTypeCookie.value || (process.client ? localStorage.getItem('token_type') : '') || 'Bearer').trim()
+
+    if (!accessToken) {
+      return false
+    }
+
+    const response = await $fetch<AuthMeResponse>(`${apiBaseUrl}/auth/me`, {
+      method: 'GET',
+      headers: {
+        ...getNgrokHeaders(),
+        Authorization: `${tokenType} ${accessToken}`
+      }
+    })
+
+    const successCode = response.code === '200' || response.code === 200
+    if (!successCode || !response.data?.is_admin) {
+      return false
+    }
+
+    return true
   }
 
   function logout() {
@@ -125,6 +169,13 @@ export function useAdminAuth() {
       }
 
       setAuthTokens(response.data)
+
+      const isAdmin = await validateAdminAccess()
+      if (!isAdmin) {
+        logout()
+        errorMessage.value = 'เฉพาะผู้ดูแลระบบเท่านั้นที่เข้าใช้งานระบบแอดมินได้'
+        return false
+      }
 
       successMessage.value = response.message || AUTH_CONFIG.messages.loginSuccess
       return true
