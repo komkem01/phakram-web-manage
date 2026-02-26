@@ -18,6 +18,7 @@ export const SETTINGS_CONFIG = {
     orders: '/auth/orders',
     reviews: '/auth/reviews',
     promotions: '/auth/promotions',
+    cookiePolicies: '/auth/consents/cookie/policies',
     promotionReportSummary: '/auth/promotions/report/summary',
     promotionReportUsages: '/auth/promotions/report/usages',
     categories: '/system/categories',

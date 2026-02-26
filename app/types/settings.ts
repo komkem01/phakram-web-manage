@@ -208,6 +208,7 @@ export interface SystemBankAccountItem {
   account_no: string
   branch?: string
   qr_image_url?: string
+  qr_image_source?: 'INLINE' | 'STORAGE' | string
   is_active: boolean
   is_default_receive: boolean
   is_default_refund: boolean
@@ -224,6 +225,24 @@ export interface SystemBankAccountPayload {
   is_active: boolean
   is_default_receive: boolean
   is_default_refund: boolean
+}
+
+export interface CookiePolicyVersionItem {
+  policy_id: string
+  policy_key: string
+  version_no: number
+  title: string
+  content: string
+  is_active: boolean
+  effective_at: number
+  created_at: number
+  updated_at: number
+  created_by?: string | null
+}
+
+export interface CreateCookiePolicyVersionPayload {
+  title: string
+  content: string
 }
 
 export interface CategoryItem {
